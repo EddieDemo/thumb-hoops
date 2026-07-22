@@ -1,0 +1,39 @@
+html, body {
+    margin: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;            /* Board fits the viewport; never scroll */
+    overscroll-behavior: none;   /* No pull-to-refresh / rubber-banding on mobile */
+}
+
+body {
+    font-family: "Inter", sans-serif;
+    color: #ffffff;
+    /* Fallback only - colors.js sets the themed background at runtime. */
+    background-color: #E9ECEF;
+}
+
+#game {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* NOTE: the old z-index: -1 is deliberately removed. It only rendered at
+       all via a CSS background-propagation quirk (body's background promoting
+       to the root canvas), which silently broke the moment html gained a
+       background. Nothing overlays the game, so no z-index is needed. */
+}
+
+.canvas {
+    /* Pointer input hygiene: the canvas owns all gestures on itself. */
+    touch-action: none;                       /* No scroll/zoom negotiation - pointermove fires immediately */
+    user-select: none;                        /* No text-selection during drags */
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent; /* No grey tap flash on iOS */
+    -webkit-touch-callout: none;              /* No long-press callout on iOS */
+}
