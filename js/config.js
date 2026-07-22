@@ -139,7 +139,12 @@ var CONFIG = {
     },
 
     GAME: {
-        DIFFICULTY_LEVELS: [2, 3, 4], // Hoop width = difficulty * cellRes
+        // Hoop widths in cells. Width 4 was removed with the 6-column board:
+        // its only two placements cram at least one side against a wall
+        // (sometimes both), collapsing approach space - a nominally "easy"
+        // hoop that's awkward to reach is a difficulty inversion. Width 2 =
+        // exactly two ball-widths of clear aperture; width 3 = ~3.1.
+        DIFFICULTY_LEVELS: [2, 3],
         SHOOT_AREA_ROWS: 3,       // Number of rows from bottom for shooting area
         PREDICTION_FRAMES: 100,   // Full path length (steps) - used while teaching and in debug
 
@@ -167,6 +172,9 @@ var CONFIG = {
         GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
         BOUNDARY_LINE_WIDTH: 2,
         SHOOT_LINE_WIDTH: 1,
+        // Shoot line width while an aim's release would ABORT (finger still
+        // below the line): firmer, meaning "let go here and nothing fires".
+        SHOOT_LINE_HELD_WIDTH: 2.5,
         // HOOP_LINE_WIDTH_SCALE: 1 / 15, // << COMMENTED OUT: Old relative scale
         HOOP_LINE_WIDTH: 1,     // << ADDED: Fixed hoop line width in pixels
         // TRIAL (mobile-first pass): the visible grid is INFORMATION, not

@@ -149,9 +149,19 @@ InputHandler.prototype.handlePointerUp = function(event) {
 
     if (this.game.currentState === GameStates.AIMING) {
         const pos = this.getCanvasPos(event);
-        dbg(`InputHandler: Pointer up at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}) - Requesting shot, transitioning to SHOT_TAKEN.`);
-        this.game.shoot();
-        this.game.transitionTo(GameStates.SHOT_TAKEN);
+        // Feed the final position, then let the Game's single authority
+        // decide: release above the shoot line commits; release still
+        // inside the shoot zone is an ABORT - the second-guess escape
+        // hatch. The ball quietly returns to waiting, nothing consumed.
+        this.game.updateAim(pos.x, pos.y);
+        if (this.game.wouldReleaseAbort()) {
+            dbg(`InputHandler: Pointer up inside shoot zone - aborting toss.`);
+            this.game.cancelAim();
+        } else {
+            dbg(`InputHandler: Pointer up at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}) - Requesting shot, transitioning to SHOT_TAKEN.`);
+            this.game.shoot();
+            this.game.transitionTo(GameStates.SHOT_TAKEN);
+        }
     }
 };
 

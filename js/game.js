@@ -579,6 +579,10 @@ Game.prototype.startAiming = function(startX, startY) {
     // no rendering-scale factors belong anywhere in game logic.
     this.aimStartX = startX;
     this.aimStartY = startY;
+    // Live pointer position during the aim - the abort/commit rule and the
+    // shoot line's feedback both read it. Starts at the press point.
+    this.aimCurrentX = startX;
+    this.aimCurrentY = startY;
     if (!this.currentBall) { // Only create ball on the very first aim action
         const startGridY = Math.min(this.ROWS - 0.5, (startY / this.cellRes));
         const startGridX = Math.max(0.5, Math.min(this.COLUMNS - 0.5, (startX / this.cellRes)));
@@ -603,6 +607,9 @@ Game.prototype.updateAim = function(currentX, currentY) {
     // Everything below is in LOGICAL canvas pixels - the same space the
     // physics simulates in. Drag distance and max-drag are therefore
     // directly comparable (previously they were in mismatched units).
+    this.aimCurrentX = currentX;
+    this.aimCurrentY = currentY;
+
     const dx = currentX - this.aimStartX;
     const dy = currentY - this.aimStartY;
     const angle = Math.atan2(dy, dx); // Angle from start point TO current point
@@ -802,6 +809,22 @@ Game.prototype.resetStreak = function() {
  * entry action already removes all Ball objects and clears currentBall,
  * so cancelling is purely a state transition.
  */
+/**
+ * Whether releasing the drag RIGHT NOW would abort rather than shoot.
+ * The rule: the shoot line is the commitment threshold - a release still
+ * inside the shoot zone (where drags begin) means "no, wait", and the ball
+ * quietly returns to waiting. Since every drag starts in the zone, every
+ * committed shot's vector points upward BY CONSTRUCTION - flat/downward
+ * launches (physically worthless here) are fenced out at the input layer.
+ * Single authority: input routes by it, the renderer draws feedback by it.
+ * @returns {boolean}
+ */
+Game.prototype.wouldReleaseAbort = function() {
+    if (this.currentState !== GameStates.AIMING) return false;
+    const shootAreaY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
+    return this.aimCurrentY >= shootAreaY;
+};
+
 Game.prototype.cancelAim = function() {
     if (this.currentState !== GameStates.AIMING) {
         console.warn("Game: cancelAim called but not in AIMING state.");

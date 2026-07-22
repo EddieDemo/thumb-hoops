@@ -233,8 +233,14 @@ Renderer.prototype.drawCanvasBoundary = function(game) {
 
 Renderer.prototype.drawShootBoundaryLine = function(game) {
     const c = this.c; c.beginPath(); c.setLineDash([]);
-    c.strokeStyle = game.themeColors.BOUNDARY; // Use theme color
-    c.lineWidth = CONFIG.RENDER.SHOOT_LINE_WIDTH; // Use config
-    const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes; // Use config
+    // While the finger is still below the line mid-aim, releasing would
+    // ABORT - the line firms up to say "you're still in your own
+    // territory", settling the moment the drag crosses into commitment.
+    // Zero text; the line's second job.
+    const armed = game.wouldReleaseAbort();
+    c.strokeStyle = game.themeColors.BOUNDARY;
+    c.lineWidth = armed ? CONFIG.RENDER.SHOOT_LINE_HELD_WIDTH
+                        : CONFIG.RENDER.SHOOT_LINE_WIDTH;
+    const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes;
     c.moveTo(0, boundaryY); c.lineTo(game.COLUMNS * game.cellRes, boundaryY); c.stroke();
 };
