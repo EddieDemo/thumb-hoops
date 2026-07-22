@@ -164,13 +164,22 @@ Renderer.prototype.drawTrajectory = function(launchState, points, requestedSteps
 
 // --- Other Renderer Methods ---
 
-// drawGrid is only called if CONFIG.RENDER.DRAW_GRID is true
+// drawGrid is only called if CONFIG.RENDER.DRAW_GRID is true.
+// Draws ONLY the darker checkerboard alternates: the lighter half is
+// CELL_FILL_1 = the background itself, already visible beneath, so painting
+// it would be 45 redundant fills per frame. One fillStyle, plain fillRects -
+// the whole grid costs almost nothing. (Cell.draw is retired from the frame
+// loop; the Cell objects remain as createHoop's placement lattice.)
 Renderer.prototype.drawGrid = function(game) {
-    game.cells.forEach(cell => {
-        if (typeof cell.draw === 'function') {
-            cell.draw(game); // Assumes cell.draw uses the checkerboard fill logic now
+    const c = this.c;
+    const res = game.cellRes;
+    c.fillStyle = game.themeColors.CELL_FILL_2;
+    for (let y = 0; y < game.ROWS; y++) {
+        // Odd (x+y) cells are the CELL_FILL_2 alternates
+        for (let x = (y % 2 === 0) ? 1 : 0; x < game.COLUMNS; x += 2) {
+            c.fillRect(x * res, y * res, res, res);
         }
-    });
+    }
 };
 
 Renderer.prototype.drawGameObjects = function(objects) {

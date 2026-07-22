@@ -10,8 +10,16 @@ var CONFIG = {
     DEBUG: false,
 
     GRID: {
-        COLUMNS: 9,
-        ROWS: 16
+        // MOBILE-FIRST grid. 6x11 keeps the board full-bleed on modern phone
+        // viewports while making cells ~45% larger than the original 9x16
+        // on a typical 390px-wide phone - and because EVERYTHING derives
+        // from cellRes (ball, pegs, hoop, fonts, physics speeds, haptic
+        // scaling), the entire game resizes coherently from these two
+        // numbers. Consequences owned: fewer columns = wall bounces matter
+        // more, slightly less hoop-placement variety, and DIFFICULTY_LEVELS
+        // are proportionally more generous (2/7 vs the old 2/9).
+        COLUMNS: 6,
+        ROWS: 11
     },
 
     PHYSICS: { // <-- Make sure PHYSICS is correctly defined as an object key
@@ -37,7 +45,8 @@ var CONFIG = {
 
         // Defines the ball's radius relative to the cell size.
         // Calculation: ball_radius = game.cellRes * RADIUS_SCALE
-        RADIUS_SCALE: 0.5,
+        // RADIUS_SCALE is DERIVED below the CONFIG literal - see the
+        // dimensional identity note there. Do not add a literal here.
 
         // Defines the radius of the nodes (pegs) relative to the cell size.
         // Calculation: node_radius = game.cellRes * NRADIUS_SCALE
@@ -160,7 +169,12 @@ var CONFIG = {
         SHOOT_LINE_WIDTH: 1,
         // HOOP_LINE_WIDTH_SCALE: 1 / 15, // << COMMENTED OUT: Old relative scale
         HOOP_LINE_WIDTH: 1,     // << ADDED: Fixed hoop line width in pixels
-        DRAW_GRID: false, // <<< ADD THIS FLAG HERE (set true or false)
+        // TRIAL (mobile-first pass): the visible grid is INFORMATION, not
+        // decoration - the lattice every size, speed, and drag distance is
+        // measured in, made legible so players can calibrate aim and power
+        // against it. Whisper-subtle by design (CELL2 contrast ~1.06:1
+        // light / 1.34:1 dark, solved live against the current colour).
+        DRAW_GRID: true, // <<< ADD THIS FLAG HERE (set true or false)
         // Blend the ball's rendered position between physics steps so motion
         // is smooth on displays faster than STEP_HZ (90/120/144Hz phones).
         // Rendering runs a fraction of one step behind the simulation -
@@ -223,9 +237,15 @@ var CONFIG = {
             // corresponding original hand-tuned grey theme - dark UIs need
             // larger luminance gaps to feel perceptually equivalent (the
             // old dark ink measured 13:1 where the light ink measured 6.9:1).
+            // Surface targets form an ORDERED LADDER per mode:
+            //   cell2 < score < best < boundary, each rung perceptibly
+            // separated, all in the whisper register. Ratios are NOT
+            // perceptually uniform across registers (near black the WCAG
+            // flare term makes equal ratios read far louder), hence the
+            // dark ladder uses wider numeric spacing for similar optics.
             CONTRAST: {
-                LIGHT: { INK: 6.9,  SCORE: 1.10, BEST: 1.22, BOUNDARY: 1.26, CELL2: 1.06 },
-                DARK:  { INK: 13.0, SCORE: 1.34, BEST: 1.50, BOUNDARY: 1.89, CELL2: 1.34 },
+                LIGHT: { INK: 6.9,  SCORE: 1.14, BEST: 1.24, BOUNDARY: 1.30, CELL2: 1.028 },
+                DARK:  { INK: 13.0, SCORE: 1.45, BEST: 1.70, BOUNDARY: 2.00, CELL2: 1.05 },
 
                 // Background luminance below which the solve direction
                 // flips: elements become lighter tints instead of darker
@@ -249,6 +269,18 @@ var CONFIG = {
         // from the theme's ink (see palette.js), drawn at PREDICTION_ALPHA.
     }
 };
+
+// --- Derived dimensional identity ---
+// Ball diameter = one cell MINUS one peg radius. Consequences, by design:
+//   - The hardest hoop's clear aperture (2 cells - 2 peg radii) is EXACTLY
+//     two ball-widths.
+//   - A peg one cell from a wall leaves the ball a perfect-tangency passage
+//     (a precision myth, not a route: threadable only in the limit), ending
+//     the wall-vs-peg constraint fight that caused clipping jitter.
+//   - The peg radius is the system's single unit of tolerance (it already
+//     defines the fate transit's honesty line as ballR + pegR).
+// Derived, not hardcoded, so the identity survives any future peg tuning.
+CONFIG.PHYSICS.RADIUS_SCALE = (1 - CONFIG.PHYSICS.NRADIUS_SCALE) / 2;
 
 /**
  * Debug logger - no-ops unless CONFIG.DEBUG is true.
