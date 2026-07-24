@@ -26,8 +26,8 @@ function InputHandler(game) {
  * Records a pointer sample for flick velocity estimation and prunes
  * anything older than the sampling window.
  */
-InputHandler.prototype.recordFlickSample = function(x, y) {
-    const now = performance.now();
+InputHandler.prototype.recordFlickSample = function(x, y, t) {
+    const now = (t !== undefined) ? t : performance.now();
     this.flickSamples.push({ x: x, y: y, t: now });
     const cutoff = now - CONFIG.INPUT.FLICK.SAMPLE_WINDOW_MS;
     while (this.flickSamples.length > 0 && this.flickSamples[0].t < cutoff) {
@@ -42,10 +42,28 @@ InputHandler.prototype.recordFlickSample = function(x, y) {
 InputHandler.prototype.computeFlickVelocity = function() {
     const s = this.flickSamples;
     if (s.length < 2) return null;
-    const first = s[0], last = s[s.length - 1];
-    const dtMs = last.t - first.t;
-    if (dtMs <= 0) return null;
-    const pxPerMs = { x: (last.x - first.x) / dtMs, y: (last.y - first.y) / dtMs };
+
+    // LEAST-SQUARES velocity fit: the slope of the best-fit line through
+    // ALL samples in the window, per axis. The old endpoint-difference
+    // gave the final sample - systematically the least reliable reading,
+    // taken as the thumb rolls off the glass - half the vote; here one
+    // junk reading is outvoted by the rest. Same average mapping,
+    // tighter scatter: identical-feeling gestures produce more identical
+    // throws. (With 2 samples this degrades exactly to the endpoint
+    // method; with evenly-spaced constant-velocity samples the two are
+    // bit-identical - it's pure noise reduction, not a feel change.)
+    let n = s.length, tSum = 0, xSum = 0, ySum = 0;
+    for (const p of s) { tSum += p.t; xSum += p.x; ySum += p.y; }
+    const tMean = tSum / n, xMean = xSum / n, yMean = ySum / n;
+    let stt = 0, stx = 0, sty = 0;
+    for (const p of s) {
+        const dt = p.t - tMean;
+        stt += dt * dt;
+        stx += dt * (p.x - xMean);
+        sty += dt * (p.y - yMean);
+    }
+    if (stt <= 0) return null; // All samples at one instant - unmeasurable
+    const pxPerMs = { x: stx / stt, y: sty / stt };
     const msPerStep = 1000 / CONFIG.PHYSICS.STEP_HZ;
     const k = msPerStep * CONFIG.INPUT.FLICK.VELOCITY_SCALE;
     const raw = { x: pxPerMs.x * k, y: pxPerMs.y * k };
@@ -206,7 +224,18 @@ InputHandler.prototype.handlePointerMove = function(event) {
 
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
     if (this.game.inputScheme === 'flick') {
-        this.recordFlickSample(pos.x, pos.y);
+        // Feed the estimator EVERY sample the hardware produced: browsers
+        // batch fast touch input and deliver one event per frame with the
+        // rest coalesced inside it - recovering them can double or triple
+        // the votes per window, and helps low-sample-rate devices most.
+        if (event.getCoalescedEvents) {
+            for (const ce of event.getCoalescedEvents()) {
+                const cp = this.getCanvasPos(ce);
+                this.recordFlickSample(cp.x, cp.y, ce.timeStamp || undefined);
+            }
+        } else {
+            this.recordFlickSample(pos.x, pos.y);
+        }
 
         // RELEASE-ON-CROSSING: carrying the ball INTO the play area at
         // throwing speed releases it mid-gesture - the ball leaves the
