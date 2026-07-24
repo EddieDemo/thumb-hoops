@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -111,6 +111,7 @@ Renderer.prototype.drawFrame = function() {
     this.drawBestStreak(game);
     this.drawSchemeToggle(game); // Testing affordance (config-gated)
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
+    this.drawVersionTag(game);   // Deploy verification, bottom-left cell
 
     // Layer 4: frame and shoot line
     this.drawCanvasBoundary(game);
@@ -288,6 +289,20 @@ Renderer.prototype.drawSchemeToggle = function(game) {
     // of the theme glyph top-right.
     const centerX = 0.5 * game.cellRes;
     const centerY = 0.5 * game.cellRes;
+    this.c.drawImage(cached.canvas,
+        centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * The build version, centred in the BOTTOM-LEFT cell: score's face and
+ * colour role at the corner glyphs' size - so a stale cached build is
+ * recognisable at a glance when testing on device.
+ */
+Renderer.prototype.drawVersionTag = function(game) {
+    const cached = this.getCachedText('version', CONFIG.VERSION, '700',
+        game.cellRes * 0.25, game.themeColors.SCORE);
+    const centerX = 0.5 * game.cellRes;
+    const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
 };

@@ -4,6 +4,9 @@
 // Global Configuration Object
 // Use 'var' for broader compatibility without modules
 var CONFIG = {
+    // Displayed bottom-left on the court and in the page title - bump on
+    // every deploy so a cached stale build is instantly recognisable.
+    VERSION: 'v42',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
