@@ -110,7 +110,7 @@ var CONFIG = {
             // low speeds (lob precision untouched), rising to BOOST at
             // REF. BOOST = 1.0 is EXACTLY linear - the knob's floor is
             // the off switch.
-            GAIN_BOOST: 1.35,
+            GAIN_BOOST: 1, //1.35 (previous)
             GAIN_REF_SPEED: 40,   // px/step where full boost applies
 
             // Below this speed (px/step) on the floor, the ball sleeps -
