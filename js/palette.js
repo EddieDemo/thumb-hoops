@@ -136,7 +136,24 @@ var Palette = (function() {
         return streak <= 0 ? 0 : 1 - Math.pow(cfg().CURVE_RATE, streak);
     }
 
+    // When set, the hue is a pure function of the court's seed: rerolls
+    // return the same value, so every attempt on a court wears the same
+    // colour - the daily court is the day's colour, shared by everyone.
+    let fixedHue = null;
+
+    /** Pins the palette to the court's hue (seeded-run mode). */
+    function setFixedHue(h) {
+        fixedHue = h;
+        baseHue = h;
+        Persistence.save('runHue', baseHue);
+        cachedTheme = null; // Force theme rebuild with the court's colour
+    }
+
     function rollHue() {
+        if (fixedHue !== null) {
+            baseHue = fixedHue; // The court's colour holds; "reroll" is a no-op
+            return;
+        }
         baseHue = Math.random() * 360;
         Persistence.save('runHue', baseHue);
         dbg('Palette: rolled hue', baseHue.toFixed(1));
@@ -315,6 +332,7 @@ var Palette = (function() {
 
     return {
         restore: restore,
+        setFixedHue: setFixedHue,
         beginTransitToStreak: beginTransitToStreak,
         setTransit: setTransit,
         completeTransit: completeTransit,

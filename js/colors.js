@@ -34,9 +34,33 @@ function applyTheme(game) {
 function updateDynamicTheme(game, dt) {
     const theme = Palette.update(dt);
     game.themeColors = theme;
-    if (theme.BACKGROUND !== lastAppliedBackground) {
-        document.body.style.background = theme.BACKGROUND;
-        lastAppliedBackground = theme.BACKGROUND;
+
+    // The page body carries the world's texture BEYOND the court: a CSS
+    // checkerboard (repeating-conic 2x2 tile) aligned to the canvas's
+    // position and cell size, so the pattern continues seamlessly past the
+    // walls into any viewport margins (Safari chrome letterboxing, desktop
+    // windows). The court's own cells are painted opaquely by the renderer;
+    // this is pure surround. Falls back to the plain colour when the grid
+    // is off or layout isn't known yet.
+    // Tile parity: conic quarters give TL=bg TR=cell2 / BL=cell2 BR=bg,
+    // matching the board's (x+y)%2 rule with FILL_1 at (0,0).
+    let bgValue;
+    if (CONFIG.RENDER.DRAW_GRID && game && game.rect && game.cellRes) {
+        const tile = game.cellRes * 2;
+        bgValue = 'repeating-conic-gradient(' + theme.CELL_FILL_2 + ' 0% 25%, '
+                + theme.BACKGROUND + ' 0% 50%) '
+                + game.rect.left + 'px ' + game.rect.top + 'px / '
+                + tile + 'px ' + tile + 'px';
+    } else {
+        bgValue = theme.BACKGROUND;
+    }
+
+    // The full style string is its own change key: theme, canvas position,
+    // and cell size all invalidate it (resize refreshes game.rect, so the
+    // surround re-aligns automatically).
+    if (bgValue !== lastAppliedBackground) {
+        document.body.style.background = bgValue;
+        lastAppliedBackground = bgValue;
     }
 }
 
@@ -44,6 +68,11 @@ function updateDynamicTheme(game, dt) {
  * Toggles dark mode (persisted) and reapplies.
  * Assumes 'game' is the global Game instance (created in core.js).
  */
+/** Current mode, for UI that reflects it (the theme toggle's glyph). */
+function isDarkMode() {
+    return darkMode;
+}
+
 function toggleDarkMode() {
     darkMode = !darkMode;
     Persistence.save('darkMode', darkMode);

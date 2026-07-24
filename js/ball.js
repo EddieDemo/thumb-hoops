@@ -117,22 +117,27 @@ class Ball {
      * @param {Game} game - The main game instance.
      */
     drawTrail(c, game) {
-        const ballRgb = hexToRgb(game.themeColors.BALL);
         const trailLen = this.trail.length;
-        if (!ballRgb || trailLen === 0) return;
+        if (trailLen === 0) return;
 
+        // PERF: one fillStyle for the whole trail; per-arc opacity via
+        // globalAlpha. The old version built ~30 rgba(...) strings per
+        // frame (allocate + parse each) - identical pixels, none of the
+        // churn.
         const opacityFactor = 0.1;
+        c.save();
+        c.fillStyle = game.themeColors.BALL;
 
         for (let i = trailLen - 1; i >= 0; i--) {
             const t = (trailLen - i) / trailLen; // 1 = newest, ->0 = oldest
-            const opacity = t * opacityFactor;
             const trailRadius = Math.max(0, this.radius * t);
 
+            c.globalAlpha = t * opacityFactor;
             c.beginPath();
             c.arc(this.trail[i].x, this.trail[i].y, trailRadius, 0, Math.PI * 2, false);
-            c.fillStyle = `rgba(${ballRgb.r}, ${ballRgb.g}, ${ballRgb.b}, ${opacity})`;
             c.fill();
         }
+        c.restore();
     }
 
     /**

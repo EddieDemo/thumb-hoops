@@ -12,7 +12,12 @@ const GameStates = {
 function Game() {
     // --- Properties ---
     this.canvas = document.querySelector('canvas');
-    this.c = this.canvas.getContext('2d');
+    // desynchronized: lets Chrome-family browsers bypass the compositor
+    // queue for this canvas - a measurable input-to-photon latency cut on
+    // Android, harmlessly ignored elsewhere. (alpha stays default: the
+    // board paints its own opaque background each frame, but keeping the
+    // transparent-capable context avoids any first-frame flash risk.)
+    this.c = this.canvas.getContext('2d', { desynchronized: true });
     this.rect = null; // Updated on resize
 
     // Grid dimensions from CONFIG
@@ -49,6 +54,29 @@ function Game() {
     // transition starts and is driven by the ball's fall until its centre
     // crosses the world's bottom edge. { startY, mode, t, done }
     this.fateTransit = null;
+    // Active input scheme ('drag' | 'flick') - persisted so the A/B choice
+    // survives reloads while testing.
+    this.inputScheme = Persistence.load('inputScheme', CONFIG.INPUT.SCHEME);
+
+    // --- THE COURT ---
+    // A court IS a seed: the hoop ladder and the run's hue derive from it
+    // deterministically (see js/rng.js, js/solver.js). Priority: a shared
+    // court from the URL (?seed=..., including date strings - time
+    // travel), else the DAILY court - the player's local date. Custom
+    // courts are EXHIBITION: they never write BEST records.
+    let urlSeed = null;
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+        try { urlSeed = new URLSearchParams(window.location.search).get('seed'); } catch (e) {}
+    }
+    this.courtSeed = (urlSeed && urlSeed.trim()) ? urlSeed.trim() : RNG.todaySeed();
+    // Exhibition rule: custom means NOT TODAY. A shared link to today's
+    // court counts fully (it IS the daily); yesterday's or tomorrow's date
+    // - or any arbitrary seed - is exhibition. Emergent nicety: playing
+    // tomorrow's court early is automatically record-safe practice, and
+    // the identical ladder starts counting at midnight.
+    this.isCustomCourt = this.courtSeed !== RNG.todaySeed();
+    Palette.setFixedHue(RNG.hueFor(this.courtSeed)); // The court's colour
+    dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - exhibition)' : ' (daily)'));
     // Detached one-shot effects (see effects.js) - may outlive the round
     // that spawned them. Updated/pruned in animate, drawn by the renderer.
     this.effects = [];
@@ -233,10 +261,24 @@ Game.prototype.createHoop = function() {
          return []; // No valid cell found
      };
 
-    // Select random positions and create nodes/hoop
-    const viableNode1s = getViableNode1s();
-    if (viableNode1s.length === 0) { console.error("No viable positions for Node 1! Difficulty:", this.difficulty); return; }
-    const cell1 = viableNode1s[Math.floor(Math.random() * viableNode1s.length)];
+    // THE STREAK-DIFFICULTY ARC: with the solver warm, placement (position
+    // AND width) is chosen by measured density against the current
+    // streak's target band - streak 0 draws forgiving hoops, deep streaks
+    // draw sparse ones, along the same curve family as the colour system.
+    // Falls back to legacy random placement while the cache warms.
+    let cell1 = null;
+    if (CONFIG.GAME.SOLVER.ENABLED) {
+        const placed = Solver.choosePlacementForStreak(this, this.score);
+        if (placed) {
+            this.difficulty = placed.width; // Width emerges from the band
+            cell1 = { gridX: placed.gx, gridY: placed.gy };
+        }
+    }
+    if (!cell1) {
+        const viableNode1s = getViableNode1s();
+        if (viableNode1s.length === 0) { console.error("No viable positions for Node 1! Difficulty:", this.difficulty); return; }
+        cell1 = viableNode1s[Math.floor(Math.random() * viableNode1s.length)];
+    }
     const node1 = new Node(cell1.gridX, cell1.gridY, this);
     this.nodes.push(node1); this.elements.push(node1);
 
@@ -701,6 +743,10 @@ Game.prototype.resetTeaching = function() {
  * @returns {number}
  */
 Game.prototype.getPredictionSteps = function() {
+    // Flick has no velocity until the instant of release - there is
+    // structurally nothing to predict during the gesture, so the teaching
+    // path is drag-only. (Ghost trails are flick's teaching candidate.)
+    if (this.inputScheme === 'flick') return 0;
     if (CONFIG.RENDER.PREDICTION_PATH_ALWAYS) {
         return CONFIG.GAME.PREDICTION_FRAMES; // Debug: full path, always
     }
@@ -764,8 +810,10 @@ Game.prototype.registerScore = function() {
     this.startFateTransit('score'); // The world blooms with the fall
 
     // Best streak updates LIVE, the moment it's exceeded - watching BEST
-    // tick up with you is part of the reward.
-    if (this.score > this.bestStreak) {
+    // tick up with you is part of the reward. EXHIBITION GUARD: a custom
+    // court (loaded via ?seed=) never writes records - a friend's easy
+    // Tuesday must not pollute your ladder.
+    if (!this.isCustomCourt && this.score > this.bestStreak) {
         this.bestStreak = this.score;
         Persistence.save('bestStreak', this.bestStreak);
     }
@@ -787,6 +835,10 @@ Game.prototype.resetStreak = function() {
     // path), the Palette is settled and rerolled - don't drain again. The
     // timed drain remains for streak ends with no ball in flight (manual
     // restart, or restart mid-flight before fate was sealed).
+    // New attempt on the court: the solver's within-attempt memory clears
+    // so every attempt climbs the identical ladder from rung 0.
+    Solver.newAttempt();
+
     const ft = this.fateTransit;
     if (ft && ft.mode === 'miss') {
         if (!ft.done) { Palette.setTransit(1); Palette.completeTransit(); ft.done = true; ft.exitT = 1; }
@@ -810,6 +862,49 @@ Game.prototype.resetStreak = function() {
  * so cancelling is purely a state transition.
  */
 /**
+ * FLICK: moves the carried ball with the thumb, clamped inside the walls
+ * and (by config) the shoot zone - every throw starts below the line.
+ */
+Game.prototype.moveCarriedBall = function(x, y) {
+    if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
+    this.aimCurrentX = x;
+    this.aimCurrentY = y;
+    const r = this.currentBall.radius;
+    const minX = r, maxX = this.COLUMNS * this.cellRes - r;
+    let minY = r;
+    if (CONFIG.INPUT.FLICK.CLAMP_TO_ZONE) {
+        minY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes + r;
+    }
+    const maxY = this.ROWS * this.cellRes - r;
+    this.currentBall.pixelX = Math.max(minX, Math.min(maxX, x));
+    this.currentBall.pixelY = Math.max(minY, Math.min(maxY, y));
+    this.currentBall.prePixelX = this.currentBall.pixelX;
+    this.currentBall.prePixelY = this.currentBall.pixelY;
+};
+
+/**
+ * FLICK: commits a throw with the gesture's release velocity (px/step).
+ * Reuses the drag pipeline end-to-end: velocity in, everything else
+ * (teaching count, fate machinery, states) identical between schemes.
+ */
+Game.prototype.shootWithVelocity = function(vx, vy) {
+    if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
+    this.currentBall.hypotheticalVelocity = { x: vx, y: vy };
+    this.shoot();
+};
+
+/**
+ * Switches input scheme (persisted) and restarts the run - the testing
+ * toggle's action. Safe in any state: requestRestart handles cleanup.
+ */
+Game.prototype.toggleInputScheme = function() {
+    this.inputScheme = this.inputScheme === 'drag' ? 'flick' : 'drag';
+    Persistence.save('inputScheme', this.inputScheme);
+    dbg('Game: input scheme ->', this.inputScheme);
+    this.requestRestart();
+};
+
+/**
  * Whether releasing the drag RIGHT NOW would abort rather than shoot.
  * The rule: the shoot line is the commitment threshold - a release still
  * inside the shoot zone (where drags begin) means "no, wait", and the ball
@@ -820,6 +915,10 @@ Game.prototype.resetStreak = function() {
  * @returns {boolean}
  */
 Game.prototype.wouldReleaseAbort = function() {
+    // Flick decides abort by RELEASE VELOCITY (a slow release sets the
+    // ball down), which is unknowable mid-gesture - so the position rule
+    // and the shoot line's firming feedback are drag-only.
+    if (this.inputScheme === 'flick') return false;
     if (this.currentState !== GameStates.AIMING) return false;
     const shootAreaY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
     return this.aimCurrentY >= shootAreaY;

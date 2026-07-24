@@ -81,6 +81,33 @@ var CONFIG = {
         PEG_RESTITUTION: 0.55
     },
 
+    INPUT: {
+        // 'drag'  = aim by dragging: direction/power from start->current
+        //           vector, held and adjustable, release above the line
+        //           commits (the shipping scheme).
+        // 'flick' = pick the ball up and THROW it: the ball follows the
+        //           thumb; release velocity (sampled from the gesture's
+        //           last moments) becomes launch velocity; a slow release
+        //           sets the ball down (abort). EXPERIMENT - judge at
+        //           streak 6+, not first-minute delight.
+        SCHEME: 'drag',
+
+        // Testing affordance: a small label top-left showing the active
+        // scheme; tapping it restarts the run and switches scheme
+        // (persisted). Turn off for any public build.
+        SHOW_SCHEME_TOGGLE: true,
+
+        FLICK: {
+            SAMPLE_WINDOW_MS: 80,   // Gesture window sampled for velocity
+            VELOCITY_SCALE: 1.0,    // Gesture px/ms -> launch scaling knob
+            MIN_LAUNCH_SPEED: 6,    // px/step; slower release = set-down abort
+            // Carry is clamped to the shoot zone: you can't walk the ball
+            // up the court and drop it in - every throw starts below the
+            // line, so every committed shot is upward, like drag.
+            CLAMP_TO_ZONE: true
+        }
+    },
+
     MOTION: {
         // Element entry: the two rim pegs POP (easeOutBack overshoot), the
         // second a beat after the first, then the hoop line draws itself
@@ -161,6 +188,40 @@ var CONFIG = {
         // The shot counter persists either way, so reloading mid-streak can
         // never conjure a free assisted shot.
         TEACHING_SCOPE: 'run',
+        // --- Solution-density solver (see js/solver.js) ---
+        // Placement difficulty is MEASURED: candidate hoops are graded by
+        // the fraction of the sampled shot space that scores, through the
+        // real physics and rules. Sampling grid sizes trade precision for
+        // per-round cost; densities are cached per placement per session.
+        SOLVER: {
+            ENABLED: true,
+            START_POSITIONS: 5,  // Launch x positions across the zone
+            ANGLES: 16,          // Launch directions (15..165 degrees)
+            POWERS: 8,           // Launch speeds up to max drag power
+            MAX_STEPS: 140,      // Per-trajectory simulation cap
+
+            // --- The streak-difficulty arc ---
+            // Each round targets a DENSITY BAND from the measured table:
+            // streak 0 aims at the EASY anchor, deep streaks approach the
+            // HARD anchor, along the same asymptotic curve family as the
+            // colour system - the world hardens as it saturates. Width is
+            // no longer rolled separately: it EMERGES from the band (wide
+            // placements dominate the easy end, narrow the hard end).
+            STREAK_CURVE_RATE: 0.85, // q = 1 - RATE^streak (~50% at 4, ~80% at 10)
+
+            // Band anchors are FIXED CONSTANTS (measured from this board's
+            // density table) rather than live percentiles: seeded courts
+            // require the target to be identical on every device at every
+            // cache temperature. COVENANT: regenerate these if the grid,
+            // physics, or rules are ever retuned (the runtime solver can
+            // verify them under DEBUG).
+            EASY_DENSITY: 0.070,
+            HARD_DENSITY: 0.024,
+
+            SAMPLE: 7                // Placements considered per round
+                                     // (seeded shuffle; nearest to target wins)
+        },
+
         TRAIL_LENGTH: 30,
         RESET_DELAY_SECONDS: 0.5 // Delay after ball hits floor before reset
     },
@@ -193,6 +254,27 @@ var CONFIG = {
         // ignoring the teaching wean. For development/tuning only.
         PREDICTION_PATH_ALWAYS: false,
         DRAW_TRAIL: true,           // Toggle for the ball's fading trail
+
+        // --- Aim indicator (post-wean drag feedback) ---
+        // A short readback of direction and power from the ball's edge
+        // while aiming: NON-predictive (no physics - the teaching path is
+        // the only oracle), just "the ball feels your grip". Hidden while
+        // the release would abort (third subscriber to wouldReleaseAbort)
+        // and during teaching shots (the full path already speaks).
+        // The indicator speaks the game's existing motion language: the
+        // flight trail (shrinking, fading circles) projected FORWARD. The
+        // ball wears its past as a fading trail in flight; while aiming it
+        // wears its future the same way - solid at the ball, dissolving
+        // toward where it's going. Direction needs no arrow: things
+        // dissolve AWAY from their source. Power stretches the dissolve.
+        AIM: {
+            MAX_LENGTH_CELLS: 2.2,    // Dissolve span at full power (cells)
+            DOTS: 8,                  // Circles along the dissolve
+            BASE_RADIUS_CELLS: 0.10,  // First circle's radius (at the ball)
+            TAPER: 0.75,              // Radius lost across the span (0..1)
+            EDGE_GAP_CELLS: 0.10,     // Gap between ball edge and first circle
+            ALPHA: 0.6                // Starting opacity; fades to 0 at the tip
+        },
 
         // --- Prediction Path Style Options ---
         PREDICTION_PATH_STYLE: 'dots', // Options: 'dots' or 'line'

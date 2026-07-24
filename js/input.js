@@ -16,7 +16,40 @@ function InputHandler(game) {
     // Single-pointer discipline: once a drag begins, all other pointers
     // (e.g. a second thumb) are ignored until it ends.
     this.activePointerId = null;
+
+    // FLICK: ring buffer of recent pointer samples {x, y, t} - release
+    // velocity is measured over the gesture's last SAMPLE_WINDOW_MS.
+    this.flickSamples = [];
 }
+
+/**
+ * Records a pointer sample for flick velocity estimation and prunes
+ * anything older than the sampling window.
+ */
+InputHandler.prototype.recordFlickSample = function(x, y) {
+    const now = performance.now();
+    this.flickSamples.push({ x: x, y: y, t: now });
+    const cutoff = now - CONFIG.INPUT.FLICK.SAMPLE_WINDOW_MS;
+    while (this.flickSamples.length > 0 && this.flickSamples[0].t < cutoff) {
+        this.flickSamples.shift();
+    }
+};
+
+/**
+ * Release velocity in px/STEP from the sampled gesture window, or null if
+ * the gesture is too sparse to measure (treated as a set-down).
+ */
+InputHandler.prototype.computeFlickVelocity = function() {
+    const s = this.flickSamples;
+    if (s.length < 2) return null;
+    const first = s[0], last = s[s.length - 1];
+    const dtMs = last.t - first.t;
+    if (dtMs <= 0) return null;
+    const pxPerMs = { x: (last.x - first.x) / dtMs, y: (last.y - first.y) / dtMs };
+    const msPerStep = 1000 / CONFIG.PHYSICS.STEP_HZ;
+    const k = msPerStep * CONFIG.INPUT.FLICK.VELOCITY_SCALE;
+    return { x: pxPerMs.x * k, y: pxPerMs.y * k };
+};
 
 /**
  * Converts a pointer event's screen position into LOGICAL canvas
@@ -101,6 +134,26 @@ InputHandler.prototype.handlePointerDown = function(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
+
+    // Scheme toggle (testing affordance): a tap in the top-left label
+    // region restarts and switches input scheme. Checked before any aim
+    // logic; the regions can't overlap (toggle top, shoot zone bottom).
+    if (CONFIG.INPUT.SHOW_SCHEME_TOGGLE &&
+        pos.x < this.game.cellRes * 1.6 && pos.y < this.game.cellRes * 1.4) {
+        dbg('InputHandler: Scheme toggle tapped.');
+        this.game.toggleInputScheme();
+        return;
+    }
+
+    // Theme toggle (product feature): a tap in the top-right glyph region
+    // flips light/dark - same action as the T key, persisted.
+    if (pos.x > this.game.COLUMNS * this.game.cellRes - this.game.cellRes * 1.6 &&
+        pos.y < this.game.cellRes * 1.4) {
+        dbg('InputHandler: Theme toggle tapped.');
+        toggleDarkMode();
+        return;
+    }
+
     const shootAreaY = (this.game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.game.cellRes;
 
     if (this.game.currentState === GameStates.READY_TO_AIM && pos.y >= shootAreaY) {
@@ -121,6 +174,14 @@ InputHandler.prototype.handlePointerDown = function(event) {
 
         this.game.startAiming(pos.x, pos.y);
         this.game.transitionTo(GameStates.AIMING);
+
+        if (this.game.inputScheme === 'flick') {
+            // Pick the ball up: it follows the thumb from here; the
+            // gesture's final moments will become the throw.
+            this.flickSamples = [];
+            this.recordFlickSample(pos.x, pos.y);
+            this.game.moveCarriedBall(pos.x, pos.y);
+        }
     } else {
         dbg(`InputHandler: Aim start ignored. State: ${this.game.currentState}, Y: ${pos.y.toFixed(1)}`);
     }
@@ -135,7 +196,12 @@ InputHandler.prototype.handlePointerMove = function(event) {
     if (this.game.currentState !== GameStates.AIMING) return;
 
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
-    this.game.updateAim(pos.x, pos.y);
+    if (this.game.inputScheme === 'flick') {
+        this.recordFlickSample(pos.x, pos.y);
+        this.game.moveCarriedBall(pos.x, pos.y);
+    } else {
+        this.game.updateAim(pos.x, pos.y);
+    }
 };
 
 /**
@@ -149,10 +215,28 @@ InputHandler.prototype.handlePointerUp = function(event) {
 
     if (this.game.currentState === GameStates.AIMING) {
         const pos = this.getCanvasPos(event);
-        // Feed the final position, then let the Game's single authority
-        // decide: release above the shoot line commits; release still
-        // inside the shoot zone is an ABORT - the second-guess escape
-        // hatch. The ball quietly returns to waiting, nothing consumed.
+
+        if (this.game.inputScheme === 'flick') {
+            // The throw: release velocity from the gesture's last window.
+            // Slow, downward, or unmeasurable = the ball is set down.
+            this.recordFlickSample(pos.x, pos.y);
+            const v = this.computeFlickVelocity();
+            const speed = v ? Math.sqrt(v.x * v.x + v.y * v.y) : 0;
+            if (!v || speed < CONFIG.INPUT.FLICK.MIN_LAUNCH_SPEED || v.y >= 0) {
+                dbg('InputHandler: Flick release too gentle/downward - ball set down.');
+                this.game.cancelAim();
+            } else {
+                dbg(`InputHandler: Flick throw v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)}) px/step.`);
+                this.game.shootWithVelocity(v.x, v.y);
+                this.game.transitionTo(GameStates.SHOT_TAKEN);
+            }
+            return;
+        }
+
+        // DRAG: feed the final position, then let the Game's single
+        // authority decide: release above the shoot line commits; release
+        // still inside the shoot zone is an ABORT - the second-guess
+        // escape hatch. The ball quietly returns to waiting.
         this.game.updateAim(pos.x, pos.y);
         if (this.game.wouldReleaseAbort()) {
             dbg(`InputHandler: Pointer up inside shoot zone - aborting toss.`);
