@@ -198,6 +198,30 @@ InputHandler.prototype.handlePointerMove = function(event) {
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
     if (this.game.inputScheme === 'flick') {
         this.recordFlickSample(pos.x, pos.y);
+
+        // RELEASE-ON-CROSSING: carrying the ball INTO the play area at
+        // throwing speed releases it mid-gesture - the ball leaves the
+        // hand at the moment hand and ball part ways, like a real throw.
+        // The same threshold that separates throw from set-down at
+        // finger-up qualifies the crossing: FAST and UPWARD releases at
+        // the line; a slow drift just rides the clamp, still carried,
+        // still cancellable. Every flick launch thus happens AT the line -
+        // one consistent physics baseline.
+        if (this.game.currentState === GameStates.AIMING) {
+            const shootAreaY = (this.game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.game.cellRes;
+            if (pos.y < shootAreaY) {
+                const v = this.computeFlickVelocity();
+                const speed = v ? Math.sqrt(v.x * v.x + v.y * v.y) : 0;
+                if (v && v.y < 0 && speed >= CONFIG.INPUT.FLICK.MIN_LAUNCH_SPEED) {
+                    this.game.moveCarriedBall(pos.x, pos.y); // Settle at the line, pointer's x
+                    dbg(`InputHandler: Gesture crossed the line at speed - releasing. v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)})`);
+                    this.game.shootWithVelocity(v.x, v.y);
+                    this.game.transitionTo(GameStates.SHOT_TAKEN);
+                    return;
+                }
+            }
+        }
+
         this.game.moveCarriedBall(pos.x, pos.y);
     } else {
         this.game.updateAim(pos.x, pos.y);

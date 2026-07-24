@@ -387,7 +387,11 @@ Renderer.prototype.drawGameObjects = function(objects) {
 // and must render beneath the world - a wrapper drawn last defeated that).
 
 Renderer.prototype.drawScore = function(game) {
-    const cached = this.getCachedText('score', String(game.score), '700',
+    // The numeral is the LEVEL being attempted, starting at 1 - you stand
+    // on level 1, and sinking it moves you to 2. (Internally everything
+    // stays streak-based - baskets completed - this is display-layer
+    // framing only.)
+    const cached = this.getCachedText('score', String(game.score + 1), '700',
         game.cellRes * 2, game.themeColors.SCORE);
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     const centerY = (game.ROWS * game.cellRes) / 2;
@@ -402,9 +406,19 @@ Renderer.prototype.drawScore = function(game) {
  */
 Renderer.prototype.drawBestStreak = function(game) {
     if (game.bestStreak <= 0) return;
-    // BEST derives from the live theme like every other element - it
-    // blooms and drains with the world. Cached like the score numeral.
-    const cached = this.getCachedText('best', "BEST " + game.bestStreak, '600',
+    // THE DAILY RECORD replaces the all-time BEST on the glass (all-time
+    // persists in storage for the future clubhouse overlay). Reads as
+    // current : summit - cost, e.g. "1:14-9". Hidden until today's first
+    // basket (records are earned before shown), and hidden entirely on
+    // custom courts (exhibition has no ledger). Same register, same
+    // bloom-and-drain, same cache.
+    if (game.isCustomCourt || !game.daily || game.daily.best === 0) return;
+    // Summit - cost, e.g. "14-9": the highest level COMPLETED today and
+    // the misses spent when that summit was first set. Completed-basis
+    // keeps the record honest against the attempting-basis numeral: after
+    // one basket the centre reads 2, the record reads 1-0.
+    const label = game.daily.best + CONFIG.RENDER.RECORD_SEP2 + game.daily.missesAtBest;
+    const cached = this.getCachedText('best', label, '600',
         game.cellRes * 0.5, game.themeColors.BEST);
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,

@@ -262,6 +262,10 @@ var CONFIG = {
         PREDICTION_PATH_ALWAYS: false,
         DRAW_TRAIL: true,           // Toggle for the ball's fading trail
 
+        // --- Daily record separator: summit SEP2 cost, e.g. "14-9" ---
+        // Pure typography - try '/' '\u00b7' etc on glass.
+        RECORD_SEP2: '-',
+
         // --- Aim indicator (post-wean drag feedback) ---
         // A short readback of direction and power from the ball's edge
         // while aiming: NON-predictive (no physics - the teaching path is
