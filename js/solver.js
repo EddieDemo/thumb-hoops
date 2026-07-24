@@ -128,7 +128,9 @@ var Solver = (function() {
 
         // Placement bounds: KEEP IN SYNC with Game.createHoop.
         const MINMAPY = 2;
-        const MAXMAPY = game.ROWS - (MINMAPY * 2);
+        // Ceiling derives from the shoot zone: one-row buffer between the
+        // lowest hoop and the line. KEEP IN SYNC with Game.createHoop.
+        const MAXMAPY = game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS - 1;
 
         const jobs = [];
         for (const width of CONFIG.GAME.DIFFICULTY_LEVELS) {
@@ -160,7 +162,9 @@ var Solver = (function() {
     /** Placement bounds - KEEP IN SYNC with Game.createHoop. */
     function allPlacements(game) {
         const MINMAPY = 2;
-        const MAXMAPY = game.ROWS - (MINMAPY * 2);
+        // Ceiling derives from the shoot zone: one-row buffer between the
+        // lowest hoop and the line. KEEP IN SYNC with Game.createHoop.
+        const MAXMAPY = game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS - 1;
         const out = [];
         for (const width of CONFIG.GAME.DIFFICULTY_LEVELS) {
             for (let gy = MINMAPY; gy < MAXMAPY; gy++) {

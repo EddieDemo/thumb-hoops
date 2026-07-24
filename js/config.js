@@ -105,6 +105,14 @@ var CONFIG = {
             // up the court and drop it in - every throw starts below the
             // line, so every committed shot is upward, like drag.
             CLAMP_TO_ZONE: true,
+            // --- Gesture gain curve ---
+            // out = in * (1 + (BOOST-1) * min(1, speed/REF)): gain ~1 at
+            // low speeds (lob precision untouched), rising to BOOST at
+            // REF. BOOST = 1.0 is EXACTLY linear - the knob's floor is
+            // the off switch.
+            GAIN_BOOST: 1.35,
+            GAIN_REF_SPEED: 40,   // px/step where full boost applies
+
             // Below this speed (px/step) on the floor, the ball sleeps -
             // resting, waiting to be picked up.
             REST_SPEED: 0.8,
@@ -179,7 +187,12 @@ var CONFIG = {
         // hoop that's awkward to reach is a difficulty inversion. Width 2 =
         // exactly two ball-widths of clear aperture; width 3 = ~3.1.
         DIFFICULTY_LEVELS: [2, 3],
-        SHOOT_AREA_ROWS: 3,       // Number of rows from bottom for shooting area
+        // 4 rows: measured against thumb anatomy - the power stroke must
+        // fit inside the zone (release-on-crossing samples speed AT the
+        // line), and 3 rows (~3.5cm) amputated a natural 5-7cm flick.
+        // Placement ceiling derives from this (one-row buffer above the
+        // line) - changing it re-triggers the anchor covenant.
+        SHOOT_AREA_ROWS: 4,       // Number of rows from bottom for shooting area
         PREDICTION_FRAMES: 100,   // Full path length (steps) - used while teaching and in debug
 
         // --- First-run teaching (scaffold and fade) ---
@@ -222,8 +235,10 @@ var CONFIG = {
             // cache temperature. COVENANT: regenerate these if the grid,
             // physics, or rules are ever retuned (the runtime solver can
             // verify them under DEBUG).
-            EASY_DENSITY: 0.070,
-            HARD_DENSITY: 0.024,
+            // Re-measured 2026-07-24 for the 4-row zone (28 placements,
+            // hoops rows 2-5): p85 / p10 of the fresh table.
+            EASY_DENSITY: 0.063,
+            HARD_DENSITY: 0.022,
 
             SAMPLE: 7                // Placements considered per round
                                      // (seeded shuffle; nearest to target wins)

@@ -76,6 +76,19 @@ function Game() {
     // the identical ladder starts counting at midnight.
     this.isCustomCourt = this.courtSeed !== RNG.todaySeed();
     Palette.setFixedHue(RNG.hueFor(this.courtSeed)); // The court's colour
+
+    // --- THE DAILY LEDGER ---
+    // Today's record: highest rung reached (best) and the misses spent at
+    // the moment that summit was FIRST set (missesAtBest) - golf strokes,
+    // snapshotted, lexicographic (higher beats cheaper; cheaper breaks
+    // ties). 'misses' is the running count, kept silently. Keyed by the
+    // court seed itself: a new day is a new key (auto-reset at midnight),
+    // reloads resume today intact. Custom courts are exhibition - no
+    // ledger, ever.
+    const storedDaily = Persistence.load('dailyRecord', null);
+    this.daily = (storedDaily && storedDaily.seed === this.courtSeed)
+        ? storedDaily
+        : { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0 };
     dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - exhibition)' : ' (daily)'));
     // Detached one-shot effects (see effects.js) - may outlive the round
     // that spawned them. Updated/pruned in animate, drawn by the renderer.
@@ -256,7 +269,9 @@ Game.prototype.createHoop = function() {
     const MINMAPX = 0;
     const MINMAPY = 2;
     const MAXMAPX = this.COLUMNS - 1;
-    const MAXMAPY = this.ROWS - (MINMAPY * 2); // Keep hoop away from top/bottom edges
+    // Ceiling derives from the shoot zone (buffer above the line).
+    // KEEP IN SYNC with js/solver.js allPlacements/warm.
+    const MAXMAPY = this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS - 1;
 
     // Find all possible grid cells for the left node
     const getViableNode1s = () => {
@@ -601,6 +616,14 @@ Game.prototype.initiateLevelResetLogic = function() {
     }
 
     if (!this.hasScored) {
+        // A real missed shot costs a stroke on the daily ledger (voluntary
+        // restarts and scheme switches are free - putting your ball down
+        // is not a stroke). Counted silently; it only surfaces when baked
+        // into a new summit's price.
+        if (!this.isCustomCourt) {
+            this.daily.misses++;
+            Persistence.save('dailyRecord', this.daily);
+        }
         this.resetStreak(); // Miss: the streak ends (and is persisted as ended)
     } else {
         dbg("Score recorded this round, keeping streak:", this.score);
@@ -881,6 +904,13 @@ Game.prototype.registerScore = function() {
     if (!this.isCustomCourt && this.score > this.bestStreak) {
         this.bestStreak = this.score;
         Persistence.save('bestStreak', this.bestStreak);
+    }
+    // Daily summit: climbing past today's best re-sets the record LIVE,
+    // snapshotting the day's miss count as its price. Only ever improves.
+    if (!this.isCustomCourt && this.score > this.daily.best) {
+        this.daily.best = this.score;
+        this.daily.missesAtBest = this.daily.misses;
+        Persistence.save('dailyRecord', this.daily);
     }
     dbg('Game: Score registered. Streak:', this.score, 'Best:', this.bestStreak);
 };

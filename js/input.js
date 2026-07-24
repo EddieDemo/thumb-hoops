@@ -48,7 +48,16 @@ InputHandler.prototype.computeFlickVelocity = function() {
     const pxPerMs = { x: (last.x - first.x) / dtMs, y: (last.y - first.y) / dtMs };
     const msPerStep = 1000 / CONFIG.PHYSICS.STEP_HZ;
     const k = msPerStep * CONFIG.INPUT.FLICK.VELOCITY_SCALE;
-    return { x: pxPerMs.x * k, y: pxPerMs.y * k };
+    const raw = { x: pxPerMs.x * k, y: pxPerMs.y * k };
+
+    // Gesture gain curve: gain ~1 at low speeds (delicate lobs keep 1:1
+    // response), rising to GAIN_BOOST at GAIN_REF_SPEED - full power
+    // becomes reachable within the zone's stroke without amplifying
+    // sensor noise at the precision end. BOOST 1.0 = exactly linear.
+    const F = CONFIG.INPUT.FLICK;
+    const speed = Math.sqrt(raw.x * raw.x + raw.y * raw.y);
+    const gain = 1 + (F.GAIN_BOOST - 1) * Math.min(1, speed / F.GAIN_REF_SPEED);
+    return { x: raw.x * gain, y: raw.y * gain };
 };
 
 /**
