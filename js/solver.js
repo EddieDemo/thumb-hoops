@@ -209,7 +209,9 @@ var Solver = (function() {
      * attempt's rung 0 is identical).
      * @returns {{gx:number, gy:number, width:number}}
      */
-    function choosePlacementForStreak(game, streak) {
+    /** The pure selection core: no state reads beyond the given lastKey,
+     *  no state writes. Round k of court S remains a pure fn of (S, k). */
+    function selectForStreak(game, streak, lastKey) {
         warm(game); // Arms the background table-fill (a no-op after first call)
         const cfg = CONFIG.GAME.SOLVER;
 
@@ -227,7 +229,7 @@ var Solver = (function() {
         const sampled = [];
         for (const p of pool) {
             if (sampled.length >= cfg.SAMPLE) break;
-            if (keyOf(game, p) === lastPickedKey) continue;
+            if (keyOf(game, p) === lastKey) continue;
             sampled.push({ p: p, density: densityFor(game, p.gx, p.gy, p.width) });
         }
 
@@ -238,9 +240,21 @@ var Solver = (function() {
         for (const g of sampled) {
             if (Math.abs(g.density - target) < Math.abs(pick.density - target)) pick = g;
         }
+        return pick;
+    }
 
+    /** What would rung 0 of a FRESH attempt deal? Pure - no state writes.
+     *  (Used by the hold-the-world rule: a level-1 miss whose redraw is
+     *  identical keeps the court standing.) */
+    function peekFirstRung(game) {
+        const pick = selectForStreak(game, 0, null);
+        return pick ? pick.p : null;
+    }
+
+    function choosePlacementForStreak(game, streak) {
+        const pick = selectForStreak(game, streak, lastPickedKey);
         lastPickedKey = keyOf(game, pick.p);
-        dbg('Solver: [' + game.courtSeed + '] rung ' + streak + ' target ' + target.toFixed(3) +
+        dbg('Solver: [' + game.courtSeed + '] rung ' + streak +
             ' -> (' + pick.p.gx + ',' + pick.p.gy + ') w' + pick.p.width +
             ' d=' + pick.density.toFixed(3));
         return pick.p;
@@ -248,6 +262,7 @@ var Solver = (function() {
 
     return {
         choosePlacementForStreak: choosePlacementForStreak,
+        peekFirstRung: peekFirstRung,
         newAttempt: newAttempt,
         densityFor: densityFor, // Exposed for tooling and the writeup's data
         warm: warm

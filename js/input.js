@@ -219,15 +219,18 @@ InputHandler.prototype.handlePointerMove = function(event) {
         if (this.game.currentState === GameStates.AIMING) {
             const shootAreaY = (this.game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.game.cellRes;
             if (pos.y < shootAreaY) {
-                const v = this.computeFlickVelocity();
-                const speed = v ? Math.sqrt(v.x * v.x + v.y * v.y) : 0;
-                if (v && v.y < 0 && speed >= CONFIG.INPUT.FLICK.MIN_LAUNCH_SPEED) {
-                    this.game.moveCarriedBall(pos.x, pos.y); // Settle at the line, pointer's x
-                    dbg(`InputHandler: Gesture crossed the line at speed - releasing. v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)})`);
-                    this.game.shootWithVelocity(v.x, v.y);
-                    this.game.transitionTo(GameStates.SHOT_TAKEN);
-                    return;
-                }
+                // CUSTODY ENDS AT THE LINE - no speed qualifier, no
+                // pinning. The ball leaves the hand with whatever motion
+                // the gesture had: a real flick flies; a slow carry-across
+                // becomes a weak toss that flops back into the zone (a
+                // dribble) or barely crosses (a feeble promoted shot -
+                // your mistake, honestly earned). Physics and the line do
+                // ALL the judging.
+                const v = this.computeFlickVelocity() || { x: 0, y: 0 };
+                this.game.moveCarriedBall(pos.x, pos.y); // Settle at the line, pointer's x
+                dbg(`InputHandler: Ball reached the line - custody ends. v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)})`);
+                this.game.releaseCarriedBall(v.x, v.y);
+                return;
             }
         }
 
@@ -250,19 +253,17 @@ InputHandler.prototype.handlePointerUp = function(event) {
         const pos = this.getCanvasPos(event);
 
         if (this.game.inputScheme === 'flick') {
-            // The throw: release velocity from the gesture's last window.
-            // Slow, downward, or unmeasurable = the ball is set down.
+            // Release: the ball leaves the hand with the gesture's
+            // sampled velocity - whatever it is, in any direction,
+            // including nothing. There is NO throw/drop distinction: a
+            // "drop" is just a release with near-zero velocity, and
+            // physics does with it what physics does. The ball is free
+            // until (and unless) its centre exits the zone, at which
+            // point it's promoted to the official shot.
             this.recordFlickSample(pos.x, pos.y);
-            const v = this.computeFlickVelocity();
-            const speed = v ? Math.sqrt(v.x * v.x + v.y * v.y) : 0;
-            if (!v || speed < CONFIG.INPUT.FLICK.MIN_LAUNCH_SPEED || v.y >= 0) {
-                dbg('InputHandler: Flick release too gentle/downward - ball set down.');
-                this.game.cancelAim();
-            } else {
-                dbg(`InputHandler: Flick throw v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)}) px/step.`);
-                this.game.shootWithVelocity(v.x, v.y);
-                this.game.transitionTo(GameStates.SHOT_TAKEN);
-            }
+            const v = this.computeFlickVelocity() || { x: 0, y: 0 };
+            dbg(`InputHandler: Ball released v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)}) px/step.`);
+            this.game.releaseCarriedBall(v.x, v.y);
             return;
         }
 

@@ -318,6 +318,10 @@ Game.prototype.createHoop = function() {
         if (viableNode1s.length === 0) { console.error("No viable positions for Node 1! Difficulty:", this.difficulty); return; }
         cell1 = viableNode1s[Math.floor(Math.random() * viableNode1s.length)];
     }
+
+    // Remembered for the hold-the-world rule: a level-1 miss whose rung-0
+    // redraw is identical keeps the court standing (see startFateTransit).
+    this.currentPlacement = { gx: cell1.gridX, gy: cell1.gridY, width: this.difficulty };
     const node1 = new Node(cell1.gridX, cell1.gridY, this);
     this.nodes.push(node1); this.elements.push(node1);
 
@@ -451,8 +455,9 @@ Game.prototype.stepSimulation = function() {
     // Ball checks win condition, updates trails. NOTE: a scoring crossing
     // calls registerScore -> startFateTransit('score') inside this update,
     // which is why the miss-crossing check below runs AFTER it.
-    this.balls.forEach(ball => { if (!ball.isStatic) { ball.update(this); } });
+    this.balls.forEach(ball => { if (!ball.isStatic && !ball.sleeping) { ball.update(this); } });
 
+    this.checkShotPromotion();
     this.updateFateTransit();
 };
 
@@ -501,10 +506,29 @@ Game.prototype.updateFateTransit = function() {
             // registerScore already started the 'score' transit this step -
             // reaching here means it crossed OUTSIDE the posts.
             this.startFateTransit('miss');
-        } else if (ball.pixelY > hoopY && ball.preVelY <= 0 && ball.velocity.y > 0) {
-            // Apex below the line: the ball never reached hoop height, so
-            // its fate sealed the moment it started falling.
+        } else if (!this.floorSolid && ball.pixelY > hoopY && ball.preVelY <= 0 && ball.velocity.y > 0) {
+            // DRAG (open floor): apex below the line - the ball never
+            // reached hoop height and can never rise again; fate sealed
+            // the moment it started falling.
             this.startFateTransit('miss');
+        } else if (this.floorSolid && ball.pixelY > hoopY) {
+            // FLICK (solid floor): the apex rule is FALSE here - the ball
+            // can bounce and rise again. Fate seals on ENERGY instead: the
+            // ball's "potential head" P (max height above the floor it
+            // could ever reach, treating all its speed as vertical and
+            // collisions as lossless from here) is provably non-increasing
+            // - gravity conserves it, every restitution and friction only
+            // spends it. The moment P falls below what reaching the hoop
+            // line requires, a score is IMPOSSIBLE - sealed mid-bounce,
+            // wherever that happens. (While the ball is above the line,
+            // P >= needed automatically, so this can never mis-seal.)
+            const floorC = this.ROWS * this.cellRes - ball.radius;
+            const v2 = ball.velocity.x * ball.velocity.x + ball.velocity.y * ball.velocity.y;
+            const head = (floorC - ball.pixelY) + v2 / (2 * this.gravity);
+            const needed = floorC - hoopY;
+            if (head < needed) {
+                this.startFateTransit('miss');
+            }
         }
     }
 
@@ -536,6 +560,8 @@ Game.prototype.updateFateTransit = function() {
         // pegs. Below that, falling, no force in the game can return the
         // ball to peg height - so the visual shrink is provably honest, and
         // pegs stay full-size exactly while the fake-out can still use them.
+        if (ft.holdWorld) { /* The court stands - no exit plays */ }
+        else {
         if (ft.exitT === undefined) ft.exitT = 0;
         const honestyY = hoopY + this.radius + this.nRadius;
         if (ball.pixelY >= honestyY) {
@@ -544,6 +570,7 @@ Game.prototype.updateFateTransit = function() {
             ft.exitT = Math.max(ft.exitT, Math.min(1, exitRaw));
         }
         if (ft.done) ft.exitT = 1;
+        }
     }
 };
 
@@ -612,8 +639,10 @@ Game.prototype.initiateLevelResetLogic = function() {
         Palette.setTransit(1);
         Palette.completeTransit();
         this.fateTransit.done = true;
-        this.fateTransit.exitT = 1;
+        if (!this.fateTransit.holdWorld) this.fateTransit.exitT = 1;
     }
+    // The flag must outlive fateTransit (nulled below) for startHoopCycle.
+    this.holdWorldThisReset = !!(this.fateTransit && this.fateTransit.holdWorld);
 
     if (!this.hasScored) {
         // A real missed shot costs a stroke on the daily ledger (voluntary
@@ -642,6 +671,24 @@ Game.prototype.startHoopCycle = function() {
     if (this.resetTimerId) { clearTimeout(this.resetTimerId); this.resetTimerId = null; } // Safety clear
     this.lastShotPathData = null;
     this.hasScored = false; // Ensure score flag is reset for the new hoop
+
+    // HOLD THE WORLD: the level-1 redraw is this exact hoop - keep the
+    // standing court (same objects, no exit played, no entry pop), but
+    // still CONSUME the rung-0 draw so the ladder's anti-repeat memory
+    // stays aligned for rung 1.
+    if (this.holdWorldThisReset) {
+        this.holdWorldThisReset = false;
+        const placed = Solver.choosePlacementForStreak(this, this.score);
+        const cp = this.currentPlacement;
+        if (placed && cp && placed.gx === cp.gx && placed.gy === cp.gy && placed.width === cp.width) {
+            this.difficulty = placed.width;
+            dbg('Game: world holds - same hoop, new attempt.');
+            return;
+        }
+        // Defensive: the peek promised identity but the draw disagreed.
+        // Rebuild normally (loud, should never happen).
+        console.warn('Game: holdWorld mismatch - rebuilding hoop.', placed, cp);
+    }
 
     // Remove old dynamic elements. FLICK: the ball is PERSISTENT - the
     // hoop cycle replaces the court around it, never the ball itself.
@@ -870,6 +917,23 @@ Game.prototype.startFateTransit = function(mode) {
     Palette.beginTransitToStreak(mode === 'score' ? this.score : 0, mode === 'miss');
     this.fateTransit = { startY: ball.pixelY, mode: mode, t: 0, done: false };
 
+    // HOLD THE WORLD: a miss on LEVEL 1 whose fresh-attempt redraw is the
+    // identical hoop plays no exit and no re-entry - the court stands,
+    // patient and unimpressed; only the colour drains (the run truly
+    // died). On a seeded court this is the common case at level 1 by
+    // construction; the equality check is the safety net (legacy paths,
+    // future mechanics). Deeper-level misses always play the full death -
+    // falling from 7 back to 1 is real news even if the furniture matches.
+    if (mode === 'miss' && this.score === 0 && CONFIG.GAME.SOLVER.ENABLED &&
+        this.currentPlacement && typeof Solver !== 'undefined' && Solver.peekFirstRung) {
+        const next = Solver.peekFirstRung(this);
+        const cp = this.currentPlacement;
+        if (next && next.gx === cp.gx && next.gy === cp.gy && next.width === cp.width) {
+            this.fateTransit.holdWorld = true;
+            dbg('Game: level-1 miss redraws the same hoop - the world holds.');
+        }
+    }
+
     // Scored: spawn each peg's echo as a DETACHED effect. Delays radiate
     // from the crossing point (the ripple); positions are captured now, so
     // the echoes survive the pegs - and the round - that spawned them.
@@ -936,7 +1000,7 @@ Game.prototype.resetStreak = function() {
 
     const ft = this.fateTransit;
     if (ft && ft.mode === 'miss') {
-        if (!ft.done) { Palette.setTransit(1); Palette.completeTransit(); ft.done = true; ft.exitT = 1; }
+        if (!ft.done) { Palette.setTransit(1); Palette.completeTransit(); ft.done = true; if (!ft.holdWorld) ft.exitT = 1; }
     } else {
         Palette.resetRun(); // Timed drain to the start pole, then reroll
     }
@@ -1005,7 +1069,7 @@ Game.prototype.onFloorContact = function(ball) {
         Palette.setTransit(1);
         Palette.completeTransit();
         this.fateTransit.done = true;
-        this.fateTransit.exitT = 1;
+        if (!this.fateTransit.holdWorld) this.fateTransit.exitT = 1;
         this.flickResetPending = true;
     }
 };
@@ -1022,13 +1086,55 @@ Game.prototype.moveCarriedBall = function(x, y) {
     const minX = r, maxX = this.COLUMNS * this.cellRes - r;
     let minY = r;
     if (CONFIG.INPUT.FLICK.CLAMP_TO_ZONE) {
-        minY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes + r;
+        // Zone membership is judged by the ball's CENTRE (collision stays
+        // edge-based): carried, the centre rides AT the line, the ball
+        // visually straddling it.
+        minY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
     }
     const maxY = this.ROWS * this.cellRes - r;
     this.currentBall.pixelX = Math.max(minX, Math.min(maxX, x));
     this.currentBall.pixelY = Math.max(minY, Math.min(maxY, y));
     this.currentBall.prePixelX = this.currentBall.pixelX;
     this.currentBall.prePixelY = this.currentBall.pixelY;
+};
+
+/**
+ * FLICK: releases the carried ball with the gesture's velocity - ANY
+ * direction. The ball is just a ball: it bounces, rolls, dribbles. It only
+ * becomes a SHOT if its centre exits the shooting area (see
+ * checkShotPromotion) - the line is the one commitment boundary,
+ * everywhere, for everything.
+ */
+Game.prototype.releaseCarriedBall = function(vx, vy) {
+    if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
+    const ball = this.currentBall;
+    ball.sleeping = false;
+    ball.isStatic = false;
+    ball.velocity = { x: vx, y: vy };
+    ball.prePixelX = ball.pixelX;
+    ball.prePixelY = ball.pixelY;
+    dbg('Game: ball released with v=(' + vx.toFixed(1) + ', ' + vy.toFixed(1) + ') - free until it leaves the zone.');
+    this.transitionTo(GameStates.READY_TO_AIM);
+};
+
+/**
+ * FLICK: a free-flying ball whose CENTRE crosses out of the shooting area
+ * becomes the round's official shot - full lifecycle, full stakes, both
+ * directions. Whatever leaves your area is an attempt.
+ */
+Game.prototype.checkShotPromotion = function() {
+    if (this.inputScheme !== 'flick') return;
+    if (this.currentState !== GameStates.READY_TO_AIM) return;
+    const ball = this.currentBall;
+    if (!ball || ball.isStatic || ball.sleeping) return;
+    const lineY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
+    if (ball.prePixelY >= lineY && ball.pixelY < lineY) {
+        dbg('Game: ball exited the zone - promoted to SHOT.');
+        this.hasScored = false;
+        this.roundInvalidated = false;
+        this.fateTransit = null; // Fresh fate for the official attempt
+        this.transitionTo(GameStates.SHOT_TAKEN);
+    }
 };
 
 /**

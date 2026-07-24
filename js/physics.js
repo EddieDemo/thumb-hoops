@@ -131,6 +131,11 @@ PhysicsEngine.prototype.stepBallState = function(state) {
             state.velocity.x = 0;
             state.velocity.y = 0;
             state.sleeping = true;
+            // A resting ball has no motion history: clear the trail at the
+            // moment of sleep - the simulation loop stops with it, and a
+            // frozen trail would otherwise haunt the resting ball until
+            // pickup. (Guarded: trajectory-simulation states have no trail.)
+            if (state.trail) state.trail.length = 0;
         }
     }
 

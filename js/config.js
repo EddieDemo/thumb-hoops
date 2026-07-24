@@ -100,7 +100,6 @@ var CONFIG = {
         FLICK: {
             SAMPLE_WINDOW_MS: 80,   // Gesture window sampled for velocity
             VELOCITY_SCALE: 1.0,    // Gesture px/ms -> launch scaling knob
-            MIN_LAUNCH_SPEED: 6,    // px/step; slower release = set-down abort
             // Carry is clamped to the shoot zone: you can't walk the ball
             // up the court and drop it in - every throw starts below the
             // line, so every committed shot is upward, like drag.
