@@ -34,6 +34,7 @@ function PhysicsEngine(game) {
 PhysicsEngine.prototype.update = function(deltaSteps, dynamicObjects) {
     dynamicObjects.forEach(ball => {
         if (ball.isStatic) return;
+        if (ball.sleeping) return; // Resting on the floor (flick mode)
 
         // Ball objects conform to the state shape stepBallState expects
         // ({pixelX, pixelY, velocity, radius}), so we step them directly.
@@ -46,12 +47,19 @@ PhysicsEngine.prototype.update = function(deltaSteps, dynamicObjects) {
             this.game.onBallImpact(result);
         }
 
-        // Game-level consequence of floor contact: the shot is over.
-        // The ball is deliberately NOT stopped or clamped - it continues
-        // falling out of the world during RESETTING (intentional aesthetic).
-        if (result.hitFloor && this.game.currentState === GameStates.SHOT_TAKEN) {
-            dbg('PhysicsEngine: Ball crossed floor during SHOT_TAKEN, transitioning to RESETTING.');
-            this.game.transitionTo(GameStates.RESETTING);
+        // Game-level consequence of floor contact. DRAG: the shot is over;
+        // the ball is deliberately not stopped - it falls out of the world
+        // during RESETTING (that exit IS the choreography). FLICK: the
+        // floor is solid and FIRST CONTACT is the round transition - the
+        // Game handles it (round bookkeeping, hoop cycle) while the ball
+        // bounces on as the new round's resting ball.
+        if (result.hitFloor) {
+            if (this.game.floorSolid) {
+                this.game.onFloorContact(ball);
+            } else if (this.game.currentState === GameStates.SHOT_TAKEN) {
+                dbg('PhysicsEngine: Ball crossed floor during SHOT_TAKEN, transitioning to RESETTING.');
+                this.game.transitionTo(GameStates.RESETTING);
+            }
         }
     });
 };
@@ -99,7 +107,32 @@ PhysicsEngine.prototype.stepBallState = function(state) {
 
     // --- Floor detection (no response here - callers decide) ---
     const floorY = game.ROWS * game.cellRes;
-    const hitFloor = state.pixelY + r >= floorY;
+    let hitFloor = state.pixelY + r >= floorY;
+    let floorImpact = 0;
+
+    // FLICK MODE: the floor is SOLID - just another wall, same material,
+    // same restitution (no special rules by design). The ball bounces,
+    // settles, and rests, waiting to be picked up. In drag mode the floor
+    // stays open (the ball leaves the world - that exit IS the round's
+    // choreography). game.floorSolid is scheme-derived.
+    if (hitFloor && game.floorSolid) {
+        if (state.velocity.y > 0) {
+            floorImpact = state.velocity.y;
+            state.velocity.y = -state.velocity.y * CONFIG.PHYSICS.WALL_RESTITUTION;
+        }
+        state.pixelY = floorY - r;
+        // Rolling resistance: horizontal speed bleeds while touching the
+        // floor - a skim loses a little, a roll decays quickly.
+        state.velocity.x *= CONFIG.INPUT.FLICK.ROLLING_FRICTION;
+        // Rest: below a small energy threshold the ball sleeps on the
+        // floor (otherwise gravity re-collides it every step forever).
+        if (Math.abs(state.velocity.y) < CONFIG.INPUT.FLICK.REST_SPEED &&
+            Math.abs(state.velocity.x) < CONFIG.INPUT.FLICK.REST_SPEED) {
+            state.velocity.x = 0;
+            state.velocity.y = 0;
+            state.sleeping = true;
+        }
+    }
 
     // --- Peg collisions: immovable pegs, explicit restitution ---
     if (!hitFloor) {
@@ -133,7 +166,7 @@ PhysicsEngine.prototype.stepBallState = function(state) {
         }
     }
 
-    return { hitFloor: hitFloor, wallImpact: wallImpact, pegImpact: pegImpact };
+    return { hitFloor: hitFloor, wallImpact: wallImpact, pegImpact: pegImpact, floorImpact: floorImpact };
 };
 
 /**

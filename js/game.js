@@ -181,6 +181,30 @@ Game.prototype.redefineVariables = function() {
  * Initializes or fully restarts the game.
  */
 Game.prototype.start = function() {
+    if (this.inputScheme === 'flick') {
+        // The intro: an empty world, a ball falling into it. The court
+        // rises when the ball first lands (onFloorContact). The lattice
+        // itself (cells - placement geometry AND the visible grid) is
+        // built now; only the hoop waits for the landing.
+        this.redefineVariables();
+        this.elements = []; this.cells = []; this.nodes = [];
+        this.lines = []; this.balls = [];
+        for (let i = 0; i < this.COLUMNS; i++) {
+            for (let j = 0; j < this.ROWS; j++) {
+                const cell = new Cell(i, j, this);
+                this.cells.push(cell); this.elements.push(cell);
+            }
+        }
+        this.spawnDropBall();
+        this.transitionTo(GameStates.SHOT_TAKEN); // Physics runs; can't aim yet
+        this.lastTime = performance.now(); // Without this, frame 1's delta
+        // is the whole time since navigation - a fast-forwarded intro.
+        // NOTE: no requestAnimationFrame here - core.js starts THE loop
+        // (single owner). A second chain here ran the game at exactly 2x:
+        // duplicate same-frame calls have delta 0, and the fallback clamp
+        // below minted each one a full 1/60s of phantom time.
+        return;
+    }
     dbg("Starting game...");
 
     // Ensure any pending reset timer is cleared immediately
@@ -309,9 +333,14 @@ Game.prototype.animate = function(timestamp) {
 
     // --- Calculate DeltaTime (real seconds since last frame) ---
     this.deltaTime = (timestamp - this.lastTime) / 1000;
+    // DEFENSE: a second animate call in the SAME frame (a duplicate RAF
+    // chain) arrives with delta exactly 0. Feeding it the fallback would
+    // mint phantom time - the game runs at 2x. Drop the call instead:
+    // duplicates become harmless no-ops rather than speed multipliers.
+    if (this.deltaTime === 0) return;
     // Use fallback delta if calculation is invalid or too large (e.g. first
     // frame, or returning from a backgrounded tab).
-    if (isNaN(this.deltaTime) || this.deltaTime <= 0 || this.deltaTime > 0.1) {
+    if (isNaN(this.deltaTime) || this.deltaTime < 0 || this.deltaTime > 0.1) {
         this.deltaTime = 1 / 60;
     }
     this.lastTime = timestamp;
@@ -324,10 +353,23 @@ Game.prototype.animate = function(timestamp) {
         this.effects = this.effects.filter(fx => !fx.done);
     }
 
+    // FLICK: a landing last frame completed the transit on screen; this
+    // frame the round turns over - bookkeeping, new hoop popping while the
+    // ball bounces on.
+    if (this.flickResetPending) {
+        this.flickResetPending = false;
+        this.initiateLevelResetLogic();
+        this.transitionTo(GameStates.READY_TO_AIM);
+    }
+
     // --- State-Dependent Simulation Stepping ---
+    // Flick's persistent ball can be mid-settle in ANY state (intro drop,
+    // post-round bounce, set-down): step whenever a dynamic ball exists.
+    const anyDynamicBall = this.balls.some(b => !b.isStatic && !b.sleeping);
     const inPhysicsState =
         this.currentState === GameStates.SHOT_TAKEN ||
-        this.currentState === GameStates.RESETTING;
+        this.currentState === GameStates.RESETTING ||
+        (this.inputScheme === 'flick' && anyDynamicBall);
 
     if (inPhysicsState) {
         this.accumulator += this.deltaTime;
@@ -347,9 +389,6 @@ Game.prototype.animate = function(timestamp) {
         if (stepsTaken === maxSteps && this.accumulator >= stepDuration) {
             console.warn(`Game: Simulation running behind - dropping ${this.accumulator.toFixed(3)}s of backlog.`);
             this.accumulator = 0;
-    // Render interpolation factor (0..1): progress toward the next fixed
-    // step, set every frame in animate(), read by Ball.draw().
-    this.renderAlpha = 1;
         }
 
         // How far we are toward the NEXT step (0..1) - the renderer blends
@@ -408,6 +447,13 @@ Game.prototype.stepSimulation = function() {
  * and completion at the world's bottom edge.
  */
 Game.prototype.updateFateTransit = function() {
+    // Fate only exists while a SHOT is live. Flick's persistent ball also
+    // moves during READY (intro drop, settle bounces, set-down falls) -
+    // without this gate, every settle-bounce's apex armed a spurious
+    // 'miss' transit, draining the world in sympathy with the bouncing.
+    if (this.currentState === GameStates.READY_TO_AIM ||
+        this.currentState === GameStates.AIMING) return;
+
     const ball = this.currentBall;
     if (!ball || ball.isStatic || this.lines.length === 0) return;
 
@@ -450,7 +496,12 @@ Game.prototype.updateFateTransit = function() {
     // --- Drive: colour progress is a pure function of the ball's height ---
     if (this.fateTransit && !this.fateTransit.done) {
         const ft = this.fateTransit;
-        const endY = this.ROWS * this.cellRes; // World's bottom edge
+        // The span's endpoint is where the ball's CENTRE can actually
+        // finish: the bottom edge in drag (the ball leaves the world), but
+        // one radius short of it in flick - the solid floor stops the
+        // centre there, and the transit must complete AT the landing, not
+        // ceiling out just before it.
+        const endY = this.ROWS * this.cellRes - (this.floorSolid ? ball.radius : 0);
         const span = endY - ft.startY;
         // Ratchet: rattles can move the ball back UP; the colour only ever
         // advances. Degenerate spans (fate sealed at the floor) complete
@@ -473,7 +524,7 @@ Game.prototype.updateFateTransit = function() {
         if (ft.exitT === undefined) ft.exitT = 0;
         const honestyY = hoopY + this.radius + this.nRadius;
         if (ball.pixelY >= honestyY) {
-            const exitSpan = endY - honestyY;
+            const exitSpan = endY - honestyY; // Same reachable endpoint
             const exitRaw = exitSpan > 1 ? (ball.pixelY - honestyY) / exitSpan : 1;
             ft.exitT = Math.max(ft.exitT, Math.min(1, exitRaw));
         }
@@ -569,9 +620,15 @@ Game.prototype.startHoopCycle = function() {
     this.lastShotPathData = null;
     this.hasScored = false; // Ensure score flag is reset for the new hoop
 
-    // Remove old dynamic elements
-    this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop || el instanceof Ball));
-    this.nodes = []; this.lines = []; this.balls = []; this.currentBall = null;
+    // Remove old dynamic elements. FLICK: the ball is PERSISTENT - the
+    // hoop cycle replaces the court around it, never the ball itself.
+    if (this.inputScheme === 'flick') {
+        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop));
+        this.nodes = []; this.lines = [];
+    } else {
+        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop || el instanceof Ball));
+        this.nodes = []; this.lines = []; this.balls = []; this.currentBall = null;
+    }
 
     this.redefineVariables(); // Recalculate layout/sizes (no game-state side effects)
 
@@ -625,7 +682,15 @@ Game.prototype.startAiming = function(startX, startY) {
     // shoot line's feedback both read it. Starts at the press point.
     this.aimCurrentX = startX;
     this.aimCurrentY = startY;
-    if (!this.currentBall) { // Only create ball on the very first aim action
+    if (this.inputScheme === 'flick' && this.currentBall) {
+        // Pick up the persistent resting ball: wake it, hold it (static
+        // while carried - the gesture, not physics, moves it).
+        this.currentBall.sleeping = false;
+        this.currentBall.isStatic = true;
+        this.currentBall.velocity = { x: 0, y: 0 };
+        this.currentBall.trail = [];
+        this.moveCarriedBall(startX, startY);
+    } else if (!this.currentBall) { // Only create ball on the very first aim action
         const startGridY = Math.min(this.ROWS - 0.5, (startY / this.cellRes));
         const startGridX = Math.max(0.5, Math.min(this.COLUMNS - 0.5, (startX / this.cellRes)));
         this.currentBall = new Ball(startGridX, startGridY, this);
@@ -862,6 +927,60 @@ Game.prototype.resetStreak = function() {
  * so cancelling is purely a state transition.
  */
 /**
+ * FLICK: whether the floor is solid (scheme-derived; see physics.js).
+ */
+Object.defineProperty(Game.prototype, 'floorSolid', {
+    get: function() { return this.inputScheme === 'flick'; }
+});
+
+/**
+ * FLICK: spawns the persistent ball falling in from above the screen -
+ * the wordless invitation. At session start it falls through an EMPTY
+ * world; its first landing raises the court (see onFloorContact).
+ */
+Game.prototype.spawnDropBall = function() {
+    const startGridX = this.COLUMNS / 2;
+    const ball = new Ball(startGridX, -1.5, this);
+    ball.release(); // Dynamic immediately - it's falling
+    ball.velocity = { x: 0, y: 0 };
+    this.currentBall = ball;
+    this.balls = [ball];
+    this.elements.push(ball);
+    dbg('Game: flick ball dropping in.');
+};
+
+/**
+ * FLICK: first floor contact is the round boundary.
+ *  - Intro (no hoop yet): the landing raises the court - pegs pop.
+ *  - Shot resolved (fate sealed): complete the round NOW - bookkeeping,
+ *    world reset, new hoop popping while the ball bounces to rest as the
+ *    next round's resting ball.
+ *  - Otherwise (set-down abort settling, later bounces): nothing - the
+ *    ball is just coming to rest.
+ */
+Game.prototype.onFloorContact = function(ball) {
+    if (this.lines.length === 0) {
+        dbg('Game: flick intro landing - raising the court.');
+        this.startHoopCycle();
+        this.transitionTo(GameStates.READY_TO_AIM);
+        return;
+    }
+    if (this.fateTransit && this.currentState === GameStates.SHOT_TAKEN) {
+        // ONE-FRAME COMPLETION BEAT: complete the transit at the moment of
+        // contact - palette fully landed, elements fully exited - and let
+        // that state RENDER for one frame before the world swaps. Without
+        // it, the swap fires inside the contact step and the exit's final
+        // sliver never reaches the screen (pegs skip from tiny to gone).
+        dbg('Game: flick landing - transit completes this frame, next round rises next frame.');
+        Palette.setTransit(1);
+        Palette.completeTransit();
+        this.fateTransit.done = true;
+        this.fateTransit.exitT = 1;
+        this.flickResetPending = true;
+    }
+};
+
+/**
  * FLICK: moves the carried ball with the thumb, clamped inside the walls
  * and (by config) the shoot zone - every throw starts below the line.
  */
@@ -902,6 +1021,19 @@ Game.prototype.toggleInputScheme = function() {
     Persistence.save('inputScheme', this.inputScheme);
     dbg('Game: input scheme ->', this.inputScheme);
     this.requestRestart();
+
+    if (this.inputScheme === 'flick') {
+        // Entering flick replays the intro: the world empties, the ball
+        // drops in, its landing raises the court.
+        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop || el instanceof Ball));
+        this.nodes = []; this.lines = []; this.balls = []; this.currentBall = null;
+        this.fateTransit = null;
+        this.spawnDropBall();
+        this.transitionTo(GameStates.SHOT_TAKEN);
+    }
+    // Entering drag: requestRestart's READY state + existing hoop (or the
+    // next cycle) restore the drag flow; the persistent ball was cleared
+    // by the READY entry action (drag clears balls).
 };
 
 /**
@@ -930,6 +1062,13 @@ Game.prototype.cancelAim = function() {
         return;
     }
     dbg("Game: Cancelling aim, returning to READY_TO_AIM.");
+    if (this.inputScheme === 'flick' && this.currentBall) {
+        // Set-down: the ball physically DROPS from the hand and settles
+        // on the floor - a cancel you can see, not a vanishing.
+        this.currentBall.sleeping = false;
+        this.currentBall.velocity = { x: 0, y: 0 };
+        this.currentBall.release();
+    }
     this.transitionTo(GameStates.READY_TO_AIM);
 };
 
@@ -986,10 +1125,16 @@ Game.prototype.transitionTo = function(newState) {
             dbg("Entered READY_TO_AIM state: Cleaning up for new round.");
             this.hasScored = false; // Reset score flag for the new potential shot
             this.lastShotPathData = null; // Clear any old persisted path data
-            this.currentBall = null; // No ball should be active
-             // Ensure all ball objects are removed from simulation/rendering lists
-            this.elements = this.elements.filter(el => !(el instanceof Ball));
-            this.balls = [];
+            if (this.inputScheme === 'flick') {
+                // FLICK: the ball is PERSISTENT - it stays in the world
+                // (bouncing to rest, or mid-settle) and remains the
+                // currentBall, waiting to be picked up.
+            } else {
+                this.currentBall = null; // No ball should be active
+                // Ensure all ball objects are removed from simulation/rendering lists
+                this.elements = this.elements.filter(el => !(el instanceof Ball));
+                this.balls = [];
+            }
              // Hoop cycle is handled by start() or initiateLevelResetLogic() before this transition occurs.
             break;
 

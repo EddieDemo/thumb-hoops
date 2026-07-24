@@ -16,6 +16,7 @@ class Ball {
 
         // Fading position trail (drawn when CONFIG.RENDER.DRAW_TRAIL)
         this.trail = [];
+        this.sleeping = false; // Flick: resting on the solid floor
         this.trailLength = CONFIG.GAME.TRAIL_LENGTH;
 
         this.prePixelX = this.pixelX; // Previous-step position: render interpolation

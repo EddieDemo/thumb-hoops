@@ -104,7 +104,14 @@ var CONFIG = {
             // Carry is clamped to the shoot zone: you can't walk the ball
             // up the court and drop it in - every throw starts below the
             // line, so every committed shot is upward, like drag.
-            CLAMP_TO_ZONE: true
+            CLAMP_TO_ZONE: true,
+            // Below this speed (px/step) on the floor, the ball sleeps -
+            // resting, waiting to be picked up.
+            REST_SPEED: 0.8,
+            // Horizontal damping per step WHILE IN FLOOR CONTACT: light on
+            // bounces (one contact step each), strong on rolling
+            // (continuous contact) - real rolling resistance's shape.
+            ROLLING_FRICTION: 0.96
         }
     },
 
