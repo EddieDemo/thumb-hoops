@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v44',
+    VERSION: 'v45',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -113,6 +113,19 @@ var CONFIG = {
             // REF. BOOST = 1.0 is EXACTLY linear - the knob's floor is
             // the off switch.
             GAIN_BOOST: 1, //1.35 (previous)
+
+            // --- Power compression (precision aid) ---
+            // out = REF * (in/REF)^POWER_EXPONENT. The mapping is IDENTITY
+            // at REF, so normal-strength throws feel unchanged; deviations
+            // are pulled toward it, so a given % of gesture error becomes
+            // POWER_EXPONENT x that % of throw error. Measured on 20 real
+            // throws: exponent 0.7 lifts hit rate ~54% -> 60%, 0.5 -> 69%.
+            // The game only demands a 1.68x power range, so there is ample
+            // headroom. POWER_EXPONENT: 1.0 is EXACTLY linear (off switch).
+            // COVENANT: changing this changes measured difficulty - the
+            // solver's hit-rate table must be regenerated (see solver.js).
+            POWER_EXPONENT: 0.7,
+            POWER_REF: 30,   // px/step pivot - the throw that feels 'normal'
             GAIN_REF_SPEED: 40,   // px/step where full boost applies
 
             // Below this speed (px/step) on the floor, the ball sleeps -
@@ -187,7 +200,7 @@ var CONFIG = {
     // counter, and retains every gesture's raw samples for offline
     // estimator/window analysis. Tap the counter to export; C clears.
     CAPTURE: {
-        ENABLED: true,
+        ENABLED: false,
         TARGET_THROWS: 20,
         RETAIN_MS: 400   // Gesture history kept per throw (>> any window tested)
     },
@@ -241,16 +254,22 @@ var CONFIG = {
             // placements dominate the easy end, narrow the hard end).
             STREAK_CURVE_RATE: 0.85, // q = 1 - RATE^streak (~50% at 4, ~80% at 10)
 
-            // Band anchors are FIXED CONSTANTS (measured from this board's
-            // density table) rather than live percentiles: seeded courts
-            // require the target to be identical on every device at every
-            // cache temperature. COVENANT: regenerate these if the grid,
-            // physics, or rules are ever retuned (the runtime solver can
-            // verify them under DEBUG).
-            // Re-measured 2026-07-24 for the 4-row zone (28 placements,
-            // hoops rows 2-5): p85 / p10 of the fresh table.
-            EASY_DENSITY: 0.063,
-            HARD_DENSITY: 0.022,
+            // Band anchors are HUMAN HIT RATES, not geometric density.
+            // The old measure (fraction of shot space that scores) graded
+            // the board; this one grades the PLAYER's odds, using an error
+            // model calibrated from 20 captured throws (speed CV 16% x
+            // POWER_EXPONENT, release angle sigma 3.8deg, release-x sigma
+            // 0.305 cells) propagated through the real physics. The metric
+            // is "typical play": the best route available from wherever
+            // the ball happens to be, averaged over the zone - flick's
+            // actual condition - NOT the perfect-positioning ceiling.
+            // Fixed constants, because seeded courts must deal the same
+            // ladder on every device. COVENANT: regenerate the table in
+            // solver.js (and these anchors) if the grid, physics, rules,
+            // POWER_EXPONENT or the error model change.
+            // Measured 2026-07-25: table spans 62-96%.
+            EASY_HITRATE: 0.88,   // rung 0 - a shot you should make
+            HARD_HITRATE: 0.60,   // deep rungs - a shot you can make
 
             SAMPLE: 7                // Placements considered per round
                                      // (seeded shuffle; nearest to target wins)

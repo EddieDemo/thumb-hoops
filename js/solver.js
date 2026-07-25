@@ -19,6 +19,32 @@
 
 var Solver = (function() {
 
+    /**
+     * HUMAN HIT-RATE TABLE (baked; regenerate under the covenant in
+     * config.js). Key 'gx,gy,width' -> probability that a player with the
+     * measured error model scores, playing the best route available from
+     * wherever the ball happens to be. This replaced solution density as
+     * the difficulty metric: density graded the geometry, this grades the
+     * shot. Generated 2026-07-25 from a 20-throw capture, POWER_EXPONENT
+     * 0.7, propagated through the real PhysicsEngine.
+     */
+    const HIT_RATE = {
+        '0,2,2':0.770, '0,2,3':0.903, '0,3,2':0.777, '0,3,3':0.916,
+        '0,4,2':0.815, '0,4,3':0.932, '0,5,2':0.855, '0,5,3':0.963,
+        '1,2,2':0.617, '1,2,3':0.820, '1,3,2':0.667, '1,3,3':0.852,
+        '1,4,2':0.734, '1,4,3':0.861, '1,5,2':0.776, '1,5,3':0.916,
+        '2,2,2':0.617, '2,2,3':0.831, '2,3,2':0.659, '2,3,3':0.870,
+        '2,4,2':0.709, '2,4,3':0.893, '2,5,2':0.761, '2,5,3':0.934,
+        '3,2,2':0.690, '3,3,2':0.719, '3,4,2':0.743, '3,5,2':0.819,
+    };
+
+    /** Graded difficulty of a placement: the player's odds, 0..1. */
+    function rateFor(gx, gy, width) {
+        const r = HIT_RATE[gx + ',' + gy + ',' + width];
+        return (r === undefined) ? 0.5 : r; // Unknown geometry: mid-scale
+    }
+
+
     const cache = {}; // placementKey -> density (session-lived)
 
     /**
@@ -212,7 +238,8 @@ var Solver = (function() {
     /** The pure selection core: no state reads beyond the given lastKey,
      *  no state writes. Round k of court S remains a pure fn of (S, k). */
     function selectForStreak(game, streak, lastKey) {
-        warm(game); // Arms the background table-fill (a no-op after first call)
+        // No warming: the hit-rate table is baked, so grading is instant
+        // and identical on every device at every cache temperature.
         const cfg = CONFIG.GAME.SOLVER;
 
         // Seeded per-round shuffle of the FIXED pool
@@ -230,11 +257,14 @@ var Solver = (function() {
         for (const p of pool) {
             if (sampled.length >= cfg.SAMPLE) break;
             if (keyOf(game, p) === lastKey) continue;
-            sampled.push({ p: p, density: densityFor(game, p.gx, p.gy, p.width) });
+            sampled.push({ p: p, density: rateFor(p.gx, p.gy, p.width) });
         }
 
+        // The rung's target is a HIT RATE: rung 0 is a shot you should
+        // make, deep rungs are shots you can make. (The field is still
+        // named 'density' downstream; it now carries the player's odds.)
         const q = streak <= 0 ? 0 : 1 - Math.pow(cfg.STREAK_CURVE_RATE, streak);
-        const target = cfg.EASY_DENSITY + (cfg.HARD_DENSITY - cfg.EASY_DENSITY) * q;
+        const target = cfg.EASY_HITRATE + (cfg.HARD_HITRATE - cfg.EASY_HITRATE) * q;
 
         let pick = sampled[0];
         for (const g of sampled) {
@@ -262,6 +292,7 @@ var Solver = (function() {
 
     return {
         choosePlacementForStreak: choosePlacementForStreak,
+        rateFor: rateFor,
         peekFirstRung: peekFirstRung,
         newAttempt: newAttempt,
         densityFor: densityFor, // Exposed for tooling and the writeup's data

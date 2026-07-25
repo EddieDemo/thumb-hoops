@@ -110,7 +110,21 @@ InputHandler.prototype.computeFlickVelocity = function() {
     const F = CONFIG.INPUT.FLICK;
     const speed = Math.sqrt(raw.x * raw.x + raw.y * raw.y);
     const gain = 1 + (F.GAIN_BOOST - 1) * Math.min(1, speed / F.GAIN_REF_SPEED);
-    return { x: raw.x * gain, y: raw.y * gain };
+    let vx = raw.x * gain, vy = raw.y * gain;
+
+    // Power compression: pivots at POWER_REF (identity there), pulling
+    // stronger and weaker throws toward it. Direction is untouched - this
+    // scales magnitude only, so the four-direction symmetry holds exactly.
+    const p = F.POWER_EXPONENT;
+    if (p !== 1) {
+        const sp = Math.sqrt(vx * vx + vy * vy);
+        if (sp > 0.0001) {
+            const out = F.POWER_REF * Math.pow(sp / F.POWER_REF, p);
+            const k = out / sp;
+            vx *= k; vy *= k;
+        }
+    }
+    return { x: vx, y: vy };
 };
 
 /**
