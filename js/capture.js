@@ -27,8 +27,18 @@ var Capture = (function() {
     let locked = null;   // The session's fixed placement
     let loaded = false;
 
+    let urlFlag = null;
+    /** Capture runs when the config says so OR the visit carries ?capture=1. */
     function enabled() {
-        return !!(typeof CONFIG !== 'undefined' && CONFIG.CAPTURE && CONFIG.CAPTURE.ENABLED);
+        if (typeof CONFIG === 'undefined' || !CONFIG.CAPTURE) return false;
+        if (CONFIG.CAPTURE.ENABLED) return true;
+        if (urlFlag === null) {
+            try {
+                const v = new URLSearchParams(window.location.search).get('capture');
+                urlFlag = !!(v && v !== '0' && v !== 'false');
+            } catch (e) { urlFlag = false; }
+        }
+        return urlFlag;
     }
 
     function ensureLoaded() {
@@ -55,8 +65,14 @@ var Capture = (function() {
      * deals becomes the lock for the whole session (persisted, so a reload
      * mid-session resumes the same target).
      */
-    function lockedPlacement() { ensureLoaded(); return locked; }
+    function lockedPlacement() {
+        // A configured placement wins: every tester must shoot the same
+        // hoop for their sessions to be comparable.
+        if (CONFIG.CAPTURE.PLACEMENT) return CONFIG.CAPTURE.PLACEMENT;
+        ensureLoaded(); return locked;
+    }
     function lockPlacement(placed) {
+        if (CONFIG.CAPTURE.PLACEMENT) return CONFIG.CAPTURE.PLACEMENT;
         ensureLoaded();
         if (!locked && placed) {
             locked = { gx: placed.gx, gy: placed.gy, width: placed.width };
@@ -156,6 +172,11 @@ var Capture = (function() {
                 velocityScale: CONFIG.INPUT.FLICK.VELOCITY_SCALE,
                 gainBoost: CONFIG.INPUT.FLICK.GAIN_BOOST,
                 gainRefSpeed: CONFIG.INPUT.FLICK.GAIN_REF_SPEED,
+                // Release vectors are recorded POST-compression; the raw
+                // gesture is recoverable from the samples, but record the
+                // exponent so sessions stay comparable across settings.
+                powerExponent: CONFIG.INPUT.FLICK.POWER_EXPONENT,
+                powerRef: CONFIG.INPUT.FLICK.POWER_REF,
                 method: 'least-squares'
             },
             throws: log

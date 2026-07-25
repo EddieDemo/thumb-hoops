@@ -54,9 +54,18 @@ function Game() {
     // transition starts and is driven by the ball's fall until its centre
     // crosses the world's bottom edge. { startY, mode, t, done }
     this.fateTransit = null;
-    // Active input scheme ('drag' | 'flick') - persisted so the A/B choice
-    // survives reloads while testing.
-    this.inputScheme = Persistence.load('inputScheme', CONFIG.INPUT.SCHEME);
+    // Active input scheme ('drag' | 'flick'). The persisted choice only
+    // applies while the toggle is visible; with the toggle hidden the
+    // configured scheme wins, so a stored 'drag' can't strand a player
+    // (or a tester) in a scheme they have no way to leave.
+    // Flick custody: has the player released this ball during this round?
+    // Only then can leaving the zone count as a shot (see
+    // checkShotPromotion).
+    this.ballReleasedThisRound = false;
+
+    this.inputScheme = CONFIG.INPUT.SHOW_SCHEME_TOGGLE
+        ? Persistence.load('inputScheme', CONFIG.INPUT.SCHEME)
+        : CONFIG.INPUT.SCHEME;
 
     // --- THE COURT ---
     // A court IS a seed: the hoop ladder and the run's hue derive from it
@@ -642,6 +651,9 @@ Game.prototype.startResetTimer = function() {
  */
 Game.prototype.initiateLevelResetLogic = function() {
     dbg("Game: Running level reset logic...");
+    // A new round: whatever the ball is still doing is leftover physics,
+    // not an attempt, until the player picks it up again.
+    this.ballReleasedThisRound = false;
 
     // Completion guard: if the reset timer beat the ball's centre to the
     // bottom edge, land the last sliver of the transition now.
@@ -1121,6 +1133,9 @@ Game.prototype.moveCarriedBall = function(x, y) {
  */
 Game.prototype.releaseCarriedBall = function(vx, vy) {
     if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
+    // The player has now put this ball into motion: from here until the
+    // round ends, leaving the zone makes it the official attempt.
+    this.ballReleasedThisRound = true;
     const ball = this.currentBall;
     ball.sleeping = false;
     ball.isStatic = false;
@@ -1139,6 +1154,14 @@ Game.prototype.releaseCarriedBall = function(vx, vy) {
 Game.prototype.checkShotPromotion = function() {
     if (this.inputScheme !== 'flick') return;
     if (this.currentState !== GameStates.READY_TO_AIM) return;
+    // CUSTODY: the rule is "a RELEASE is a shot if the ball's centre
+    // exits the zone" - and a ball still carrying momentum from a
+    // previous round was released by nobody. Without this, a made shot
+    // powerful enough to bounce back out of the zone would be promoted
+    // into a phantom attempt and end the run the player just extended.
+    // The ball must have been in the player's hands since this round
+    // began. (An escaping dribble still qualifies - they did release it.)
+    if (!this.ballReleasedThisRound) return;
     const ball = this.currentBall;
     if (!ball || ball.isStatic || ball.sleeping) return;
     const lineY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;

@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -424,10 +424,17 @@ Renderer.prototype.drawBestStreak = function(game) {
     // it to export. Drawn BEFORE the earned-before-shown guard below: the
     // counter must be visible from throw zero.
     if (Capture.enabled()) {
+        const cx = (game.COLUMNS * game.cellRes) / 2;
         const rec = this.getCachedText('best', 'REC ' + Capture.count() + '/' + Capture.target(),
             '600', game.cellRes * 0.5, game.themeColors.BEST);
-        const cx = (game.COLUMNS * game.cellRes) / 2;
         this.c.drawImage(rec.canvas, cx - rec.w / 2, game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
+        // Testers usually receive this link without anyone beside them:
+        // the protocol has to be legible on the glass itself.
+        const done = Capture.count() >= Capture.target();
+        const hint = this.getCachedText('captureHint',
+            done ? 'TAP HERE TO SEND' : 'SAME THROW EVERY TIME',
+            '400', game.cellRes * 0.26, game.themeColors.BEST);
+        this.c.drawImage(hint.canvas, cx - hint.w / 2, game.cellRes * 1.45 - hint.h / 2, hint.w, hint.h);
         return;
     }
 

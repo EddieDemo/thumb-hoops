@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v45',
+    VERSION: 'v46',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -93,12 +93,17 @@ var CONFIG = {
         //           last moments) becomes launch velocity; a slow release
         //           sets the ball down (abort). EXPERIMENT - judge at
         //           streak 6+, not first-minute delight.
-        SCHEME: 'drag',
+        // The shipped scheme. Drag remains fully implemented behind this
+        // switch (nothing was removed) - flip back to 'drag' to play it.
+        SCHEME: 'flick',
 
         // Testing affordance: a small label top-left showing the active
         // scheme; tapping it restarts the run and switches scheme
-        // (persisted). Turn off for any public build.
-        SHOW_SCHEME_TOGGLE: true,
+        // (persisted). OFF for public builds and tester links - and while
+        // it is off, SCHEME is authoritative: any previously persisted
+        // choice is ignored, so nobody can be stranded in a scheme with no
+        // visible way back.
+        SHOW_SCHEME_TOGGLE: false,
 
         FLICK: {
             SAMPLE_WINDOW_MS: 80,   // Gesture window sampled for velocity
@@ -200,9 +205,19 @@ var CONFIG = {
     // counter, and retains every gesture's raw samples for offline
     // estimator/window analysis. Tap the counter to export; C clears.
     CAPTURE: {
+        // Off by default. Also enabled per-visit by the URL '?capture=1',
+        // so testers get a special link while the live site stays normal
+        // for everyone else - opt-in by construction, no background
+        // collection, "no trackers" stays literally true.
         ENABLED: false,
-        TARGET_THROWS: 20,
-        RETAIN_MS: 400   // Gesture history kept per throw (>> any window tested)
+        TARGET_THROWS: 25,   // A few spare for procedural fumbles
+        RETAIN_MS: 400,      // Gesture history kept per throw (>> any window tested)
+
+        // EVERY tester shoots this same hoop, or the sessions aren't
+        // comparable. It is the placement from the 2026-07-25 session, so
+        // that capture is part of the same dataset. Set to null to fall
+        // back to "whatever the solver deals first".
+        PLACEMENT: { gx: 1, gy: 5, width: 2 }
     },
 
     GAME: {
