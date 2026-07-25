@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v48',
+    VERSION: 'v52',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -345,10 +345,35 @@ var CONFIG = {
             ENTRY_DELAY_MS: 120   // after the hoop line finishes drawing
         },
 
-        // The camera crops the sky, never the play. Rows 2-10 (highest hoop
-        // down to the floor) must always be on screen; below that the cell
-        // size shrinks to fit them rather than cropping into the game.
-        MIN_VISIBLE_ROWS: 9,
+        // The camera crops the sky, never the play. Rows 1-10 must always be
+        // on screen: the highest hoop sits on row 2, so it needs a full row
+        // of sky ABOVE it - at 9 the crop line landed exactly on that hoop
+        // and sliced its pegs in half. Below this, cell size shrinks to fit
+        // rather than cropping into the game.
+        MIN_VISIBLE_ROWS: 10,
+
+        // --- The level numeral's turn-over ---
+        // The numeral belongs to the ROUND, not to the live score: it holds
+        // the level you're attempting until the world actually changes,
+        // then squashes out horizontally (riding the pegs' own exit signal,
+        // so it leaves at exactly their rate) and the new value opens back
+        // out the same way. Split-flap, in the hoop line's own vocabulary -
+        // that line already grows out of its pegs and retracts into them.
+        // No overshoot: entry mirrors exit.
+        SCORE_NUMERAL: {
+            ANIMATE: true,
+            ENTRY_MS: 200,   // Matches MOTION.PEG_POP_MS by default
+
+            SIZE_CELLS: 4,   // Cap height in cells (was 2)
+            // Drawn with real transparency rather than a pre-faded colour,
+            // so the grid's checkerboard reads THROUGH the numeral instead
+            // of being hidden by it - the number becomes a window onto the
+            // lattice rather than a panel laid over it. COLOR 'ink' lets
+            // ALPHA do all the work; 'score' restores the old flat,
+            // contrast-calibrated fill (use ALPHA 1 with it).
+            COLOR: 'ink',
+            ALPHA: 0.12
+        },
 
         GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
         BOUNDARY_LINE_WIDTH: 2,

@@ -58,6 +58,9 @@ function Game() {
     // applies while the toggle is visible; with the toggle hidden the
     // configured scheme wins, so a stored 'drag' can't strand a player
     // (or a tester) in a scheme they have no way to leave.
+    // The level shown on the court - see startHoopCycle.
+    this.displayLevel = 1;
+
     // Flick custody: has the player released this ball during this round?
     // Only then can leaving the zone count as a shot (see
     // checkShotPromotion).
@@ -179,7 +182,12 @@ Game.prototype.redefineVariables = function() {
     const viewW = window.innerWidth, viewH = window.innerHeight;
     this.cellRes = Math.min(viewW / this.COLUMNS, viewH / CONFIG.RENDER.MIN_VISIBLE_ROWS);
 
+    const worldWidth  = this.COLUMNS * this.cellRes;
     const worldHeight = this.ROWS * this.cellRes;
+    // Centred horizontally: on a phone the board fills the width and this
+    // is zero, but on a wide desktop window it is what stops the court
+    // hugging the left edge.
+    this.worldOffsetX = (viewW - worldWidth) / 2;
     // Where world y=0 lands on screen. Negative = the sky is cropped.
     this.worldOffsetY = viewH - worldHeight;
     // World y at the top of the VISIBLE area - what screen-anchored UI
@@ -204,9 +212,14 @@ Game.prototype.redefineVariables = function() {
     // Absolute transform (not scale()): repeated resizes can never compound.
     // The camera offset rides IN the transform, so every drawing call keeps
     // speaking pure world coordinates and none of them had to change.
-    this.c.setTransform(this.dpr, 0, 0, this.dpr, 0, this.worldOffsetY * this.dpr);
+    this.c.setTransform(this.dpr, 0, 0, this.dpr,
+        this.worldOffsetX * this.dpr, this.worldOffsetY * this.dpr);
 
     this.rect = this.canvas.getBoundingClientRect(); // Update cached canvas bounds
+
+    // The board's geometry is now known: let the instrument decide whether
+    // any banked session is still comparable (no-op unless capturing).
+    if (typeof Capture !== 'undefined') Capture.init(this);
 
     // Calculate physics values based on cell size and config scales
     this.gravity = this.cellRes * CONFIG.PHYSICS.GRAVITY_SCALE;
@@ -727,6 +740,9 @@ Game.prototype.initiateLevelResetLogic = function() {
  * Called by start() and initiateLevelResetLogic().
  */
 Game.prototype.startHoopCycle = function() {
+    // The numeral turns over WITH the world, not when the ball passes
+    // through: by now the score is final for the round about to begin.
+    this.displayLevel = this.score + 1;
     if (this.resetTimerId) { clearTimeout(this.resetTimerId); this.resetTimerId = null; } // Safety clear
     this.lastShotPathData = null;
     this.hasScored = false; // Ensure score flag is reset for the new hoop

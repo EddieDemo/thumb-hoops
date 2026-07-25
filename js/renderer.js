@@ -88,7 +88,7 @@ Renderer.prototype.drawFrame = function() {
     // already applied): anything the court doesn't cover must go back to
     // transparent, letting the body's checkerboard surround show through
     // exactly as before - otherwise the band above the board would smear.
-    this.c.clearRect(0, -game.worldOffsetY, game.viewW, game.viewH);
+    this.c.clearRect(-game.worldOffsetX, -game.worldOffsetY, game.viewW, game.viewH);
     this.c.fillRect(0, 0, game.COLUMNS * game.cellRes, game.ROWS * game.cellRes);
     // NOTE: theme application no longer happens here - applyTheme() runs once
     // at startup and once per toggle. The frame loop never touches the DOM.
@@ -500,12 +500,39 @@ Renderer.prototype.drawScore = function(game) {
     // on level 1, and sinking it moves you to 2. (Internally everything
     // stays streak-based - baskets completed - this is display-layer
     // framing only.)
-    const cached = this.getCachedText('score', String(game.score + 1), '700',
-        game.cellRes * 2, game.themeColors.SCORE);
+    const N0 = CONFIG.RENDER.SCORE_NUMERAL;
+    const level = (game.displayLevel !== undefined) ? game.displayLevel : game.score + 1;
+    const numeralColor = (N0 && N0.COLOR === 'score')
+        ? game.themeColors.SCORE : game.themeColors.INK;
+    const cached = this.getCachedText('score', String(level), '700',
+        game.cellRes * ((N0 && N0.SIZE_CELLS) || 2), numeralColor);
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     const centerY = (game.ROWS * game.cellRes) / 2;
+
+    // The turn-over: the old numeral fades out on the world's element-exit
+    // signal and the new one fades in with the arriving hoop. (It squashed
+    // horizontally at first - too theatrical, and the sliver at the
+    // midpoint read as a slide transition rather than as part of this
+    // world.) A hold-the-world reset plays neither, so the number simply
+    // doesn't move.
+    let presence = 1;
+    const N = CONFIG.RENDER.SCORE_NUMERAL;
+    if (N && N.ANIMATE) {
+        const exit = game.getElementExitT();
+        let entry = 1;
+        const hoop = game.lines[0];
+        if (hoop && hoop.spawnTime !== undefined) {
+            entry = Motion.progress(game.worldTime - hoop.spawnTime, 0, N.ENTRY_MS / 1000);
+        }
+        presence = Math.max(0, entry * (1 - exit));
+    }
+    if (presence <= 0.001) return;
+
+    const prevAlpha = this.c.globalAlpha;
+    this.c.globalAlpha = ((N && N.ALPHA !== undefined) ? N.ALPHA : 1) * presence;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+    this.c.globalAlpha = prevAlpha;
 };
 
 /**

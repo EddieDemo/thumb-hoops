@@ -26,6 +26,8 @@ var Capture = (function() {
     let pending = null;  // The throw between release and outcome
     let locked = null;   // The session's fixed placement
     let loaded = false;
+    let stamp = null;    // What the banked throws were recorded under
+    let started = false;
 
     let urlFlag = null;
     /** Capture runs when the config says so OR the visit carries ?capture=1. */
@@ -48,11 +50,78 @@ var Capture = (function() {
         if (stored && Array.isArray(stored.throws)) {
             log = stored.throws;
             locked = stored.locked || null;
+            stamp = stored.stamp || null;
         }
     }
 
     function persist() {
-        Persistence.save(KEY, { throws: log, locked: locked });
+        Persistence.save(KEY, { throws: log, locked: locked, stamp: stamp });
+    }
+
+    /**
+     * What these throws were recorded under. Anything here that changes
+     * makes old and new throws incomparable - a different build, a
+     * different board size, a different input mapping, a different target.
+     */
+    function stampFor(game) {
+        const F = CONFIG.INPUT.FLICK;
+        const p = lockedPlacement();
+        return {
+            version: CONFIG.VERSION,
+            cellRes: game.cellRes,
+            powerExponent: F.POWER_EXPONENT,
+            powerRef: F.POWER_REF,
+            gainBoost: F.GAIN_BOOST,
+            velocityScale: F.VELOCITY_SCALE,
+            referenceCell: F.REFERENCE_CELL,
+            windowMs: F.SAMPLE_WINDOW_MS,
+            placement: p ? (p.gx + ',' + p.gy + ',' + p.width) : null
+        };
+    }
+
+    function comparable(a, b) {
+        if (!a || !b) return false;
+        // cellRes gets a 1% tolerance: browser chrome can shave a pixel
+        // without meaningfully changing the geometry.
+        if (Math.abs(a.cellRes - b.cellRes) / b.cellRes > 0.01) return false;
+        return a.version === b.version &&
+               a.powerExponent === b.powerExponent && a.powerRef === b.powerRef &&
+               a.gainBoost === b.gainBoost && a.velocityScale === b.velocityScale &&
+               a.referenceCell === b.referenceCell && a.windowMs === b.windowMs &&
+               a.placement === b.placement;
+    }
+
+    /**
+     * Called once the board's geometry is known. Silently discards a
+     * session recorded under different conditions rather than letting new
+     * throws pile onto stale ones - phones have no keyboard, so there is
+     * no C key to save you, and a mixed-geometry file would corrupt the
+     * analysis invisibly. '?capture=1&fresh=1' forces a clean start.
+     */
+    function init(game) {
+        if (started || !enabled()) return;
+        started = true;
+        ensureLoaded();
+
+        let forced = false;
+        try {
+            const q = new URLSearchParams(window.location.search).get('fresh');
+            forced = !!(q && q !== '0' && q !== 'false');
+        } catch (e) { /* no URL access */ }
+
+        const now = stampFor(game);
+        if (forced) {
+            if (log.length) dbg('Capture: ?fresh - discarding ' + log.length + ' throw(s).');
+            log = []; pending = null;
+        } else if (log.length && !comparable(stamp, now)) {
+            console.warn('Capture: discarding ' + log.length +
+                ' throw(s) recorded under different conditions (was ' +
+                (stamp ? stamp.version + ' @ cell ' + (+stamp.cellRes).toFixed(1) : 'unstamped') +
+                ', now ' + now.version + ' @ cell ' + now.cellRes.toFixed(1) + ').');
+            log = []; pending = null;
+        }
+        stamp = now;
+        persist();
     }
 
     /** How many complete attempts are banked, and the session's goal. */
@@ -166,6 +235,7 @@ var Capture = (function() {
                     ? (Math.abs(hoop.node2.pixelX - hoop.node1.pixelX) - 2 * game.nRadius) / (2 * game.radius)
                     : null
             } : null,
+            stamp: stamp,
             estimator: {
                 sampleWindowMs: CONFIG.INPUT.FLICK.SAMPLE_WINDOW_MS,
                 retainMs: CONFIG.CAPTURE.RETAIN_MS,
@@ -236,6 +306,7 @@ var Capture = (function() {
 
     return {
         enabled: enabled,
+        init: init,
         count: count,
         target: target,
         lockedPlacement: lockedPlacement,

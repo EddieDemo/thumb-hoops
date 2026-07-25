@@ -157,7 +157,7 @@ InputHandler.prototype.getCanvasPos = function(event) {
     // Undo the camera: the canvas spans the viewport, but the world may be
     // scrolled up inside it. Everything downstream works in world space.
     return {
-        x: event.clientX - rect.left,
+        x: (event.clientX - rect.left) - this.game.worldOffsetX,
         y: (event.clientY - rect.top) - this.game.worldOffsetY
     };
 };
@@ -245,7 +245,8 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // a user gesture for the share sheet, which is exactly what this is.
     // The region sits between the two corner glyphs and can't overlap them.
     if (Capture.enabled() &&
-        pos.y < this.game.cellRes * 1.4 &&
+        pos.y > this.game.viewTopY &&
+        pos.y < this.game.viewTopY + this.game.cellRes * 1.4 &&
         pos.x > this.game.cellRes * 2 &&
         pos.x < (this.game.COLUMNS - 2) * this.game.cellRes) {
         const route = Capture.exportSession(this.game);
@@ -255,8 +256,13 @@ InputHandler.prototype.handlePointerDown = function(event) {
 
     // Theme toggle (product feature): a tap in the top-right glyph region
     // flips light/dark - same action as the T key, persisted.
+    // The region hangs from the VISIBLE top, exactly like the glyph does.
+    // Before the camera existed these were the same thing; once the sky
+    // could be cropped they diverged, and the glyph became untappable in
+    // any context that crops (browser yes, home-screen app no).
     if (pos.x > this.game.COLUMNS * this.game.cellRes - this.game.cellRes * 1.6 &&
-        pos.y < this.game.cellRes * 1.4) {
+        pos.y > this.game.viewTopY &&
+        pos.y < this.game.viewTopY + this.game.cellRes * 1.4) {
         dbg('InputHandler: Theme toggle tapped.');
         toggleDarkMode();
         return;

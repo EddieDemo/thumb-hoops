@@ -49,7 +49,8 @@ function updateDynamicTheme(game, dt) {
         const tile = game.cellRes * 2;
         bgValue = 'repeating-conic-gradient(' + theme.CELL_FILL_2 + ' 0% 25%, '
                 + theme.BACKGROUND + ' 0% 50%) '
-                + game.rect.left + 'px ' + game.rect.top + 'px / '
+                + (game.rect.left + (game.worldOffsetX || 0)) + 'px '
+                + (game.rect.top + (game.worldOffsetY || 0)) + 'px / '
                 + tile + 'px ' + tile + 'px';
     } else {
         bgValue = theme.BACKGROUND;
