@@ -23,6 +23,28 @@ function InputHandler(game) {
 }
 
 /**
+ * The honest time of a pointer event: the browser's HARDWARE timestamp
+ * (when the touch actually happened) rather than performance.now() (when
+ * our code got around to running - main-thread jitter that becomes
+ * velocity noise in the fit).
+ *
+ * Guarded: event.timeStamp is only used if it shares performance.now()'s
+ * timeline. Mixing two clock epochs inside one sample window would
+ * produce garbage velocities, so the epoch is validated once and the
+ * whole gesture then speaks one clock. Coalesced samples inherit their
+ * parent event's clock, so validating the parent covers them.
+ */
+InputHandler.prototype.eventTime = function(event) {
+    if (this._eventClockOk === undefined && event && typeof event.timeStamp === 'number') {
+        this._eventClockOk = event.timeStamp > 0 &&
+            Math.abs(performance.now() - event.timeStamp) < 5000;
+    }
+    return (this._eventClockOk && event && typeof event.timeStamp === 'number')
+        ? event.timeStamp
+        : performance.now();
+};
+
+/**
  * Records a pointer sample for flick velocity estimation and prunes
  * anything older than the sampling window.
  */
@@ -32,6 +54,19 @@ InputHandler.prototype.recordFlickSample = function(x, y, t) {
     const cutoff = now - CONFIG.INPUT.FLICK.SAMPLE_WINDOW_MS;
     while (this.flickSamples.length > 0 && this.flickSamples[0].t < cutoff) {
         this.flickSamples.shift();
+    }
+
+    // INSTRUMENT: a second, longer-retention buffer holding the gesture's
+    // raw history - far more than any window we might test - so captured
+    // throws can be replayed offline through other estimators and window
+    // lengths. Costs nothing when capture is off.
+    if (Capture.enabled()) {
+        if (!this.captureSamples) this.captureSamples = [];
+        this.captureSamples.push({ x: x, y: y, t: now });
+        const keep = now - CONFIG.CAPTURE.RETAIN_MS;
+        while (this.captureSamples.length > 0 && this.captureSamples[0].t < keep) {
+            this.captureSamples.shift();
+        }
     }
 };
 
@@ -115,6 +150,10 @@ InputHandler.prototype.attachEventListeners = function() {
     const canvas = this.game.canvas;
     canvas.addEventListener('pointerdown', this.handlePointerDown.bind(this), false);
     canvas.addEventListener('pointermove', this.handlePointerMove.bind(this), false);
+    if (window.onpointerrawupdate !== undefined || 'onpointerrawupdate' in window) {
+        canvas.addEventListener('pointerrawupdate', this.handlePointerRawUpdate.bind(this), false);
+        dbg('InputHandler: pointerrawupdate available - sampling at hardware rate.');
+    }
     canvas.addEventListener('pointerup', this.handlePointerUp.bind(this), false);
     canvas.addEventListener('pointercancel', this.handlePointerCancel.bind(this), false);
 
@@ -136,6 +175,10 @@ InputHandler.prototype.handleKeyDown = function(event) {
         case 'T': // reserved for any future aiming refinement)
             dbg('InputHandler: Requesting theme toggle...');
             toggleDarkMode();
+            break;
+        case 'c': // C - DEBUG: clear the capture session
+        case 'C':
+            if (Capture.enabled()) { Capture.reset(); }
             break;
         case 'r': // R - DEBUG: rewind the teaching wean to shot 1
         case 'R':
@@ -169,6 +212,18 @@ InputHandler.prototype.handlePointerDown = function(event) {
         pos.x < this.game.cellRes * 1.6 && pos.y < this.game.cellRes * 1.4) {
         dbg('InputHandler: Scheme toggle tapped.');
         this.game.toggleInputScheme();
+        return;
+    }
+
+    // INSTRUMENT: tap the REC counter to export the session. iOS requires
+    // a user gesture for the share sheet, which is exactly what this is.
+    // The region sits between the two corner glyphs and can't overlap them.
+    if (Capture.enabled() &&
+        pos.y < this.game.cellRes * 1.4 &&
+        pos.x > this.game.cellRes * 2 &&
+        pos.x < (this.game.COLUMNS - 2) * this.game.cellRes) {
+        const route = Capture.exportSession(this.game);
+        dbg('InputHandler: Capture export via ' + route + '.');
         return;
     }
 
@@ -206,12 +261,50 @@ InputHandler.prototype.handlePointerDown = function(event) {
             // Pick the ball up: it follows the thumb from here; the
             // gesture's final moments will become the throw.
             this.flickSamples = [];
-            this.recordFlickSample(pos.x, pos.y);
+            this.captureSamples = [];
+            this.recordFlickSample(pos.x, pos.y, this.eventTime(event));
             this.game.moveCarriedBall(pos.x, pos.y);
         }
     } else {
         dbg(`InputHandler: Aim start ignored. State: ${this.game.currentState}, Y: ${pos.y.toFixed(1)}`);
     }
+};
+
+/**
+ * Feeds the estimator every reading an event carries: the coalesced
+ * history (all the points the browser batched away between frames) when
+ * available, otherwise the single point. Each keeps its own hardware
+ * timestamp, so the fit sees when the touches HAPPENED.
+ */
+InputHandler.prototype.sampleFromEvent = function(event, pos) {
+    if (event.getCoalescedEvents) {
+        const coalesced = event.getCoalescedEvents();
+        if (coalesced && coalesced.length) {
+            for (const ce of coalesced) {
+                const cp = this.getCanvasPos(ce);
+                this.recordFlickSample(cp.x, cp.y, this.eventTime(ce));
+            }
+            return;
+        }
+    }
+    const p = pos || this.getCanvasPos(event);
+    this.recordFlickSample(p.x, p.y, this.eventTime(event));
+};
+
+/**
+ * pointerrawupdate: the same motion as pointermove but delivered as soon
+ * as the hardware reports it, rather than being held for the next frame.
+ * More samples, fresher - and it helps low-sample-rate devices most.
+ * Sampling ONLY: the ball's position, the crossing-release check and all
+ * game state stay on pointermove, so the visible game is unchanged and
+ * this can never fire game logic twice.
+ */
+InputHandler.prototype.handlePointerRawUpdate = function(event) {
+    if (event.pointerId !== this.activePointerId) return;
+    if (this.game.inputScheme !== 'flick') return;
+    if (this.game.currentState !== GameStates.AIMING) return;
+    this._rawUpdateActive = true; // Proven live: pointermove stops sampling
+    this.sampleFromEvent(event, null);
 };
 
 /**
@@ -228,13 +321,11 @@ InputHandler.prototype.handlePointerMove = function(event) {
         // batch fast touch input and deliver one event per frame with the
         // rest coalesced inside it - recovering them can double or triple
         // the votes per window, and helps low-sample-rate devices most.
-        if (event.getCoalescedEvents) {
-            for (const ce of event.getCoalescedEvents()) {
-                const cp = this.getCanvasPos(ce);
-                this.recordFlickSample(cp.x, cp.y, ce.timeStamp || undefined);
-            }
-        } else {
-            this.recordFlickSample(pos.x, pos.y);
+        // pointerrawupdate (when supported) already recorded this motion at
+        // full hardware rate, unbuffered by the frame loop - sampling here
+        // too would duplicate points and bias the fit toward frame times.
+        if (!this._rawUpdateActive) {
+            this.sampleFromEvent(event, pos);
         }
 
         // RELEASE-ON-CROSSING: carrying the ball INTO the play area at
@@ -258,6 +349,7 @@ InputHandler.prototype.handlePointerMove = function(event) {
                 const v = this.computeFlickVelocity() || { x: 0, y: 0 };
                 this.game.moveCarriedBall(pos.x, pos.y); // Settle at the line, pointer's x
                 dbg(`InputHandler: Ball reached the line - custody ends. v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)})`);
+                Capture.recordRelease(this.game, this.captureSamples, v, this.game.currentBall);
                 this.game.releaseCarriedBall(v.x, v.y);
                 return;
             }
@@ -289,9 +381,10 @@ InputHandler.prototype.handlePointerUp = function(event) {
             // physics does with it what physics does. The ball is free
             // until (and unless) its centre exits the zone, at which
             // point it's promoted to the official shot.
-            this.recordFlickSample(pos.x, pos.y);
+            this.recordFlickSample(pos.x, pos.y, this.eventTime(event));
             const v = this.computeFlickVelocity() || { x: 0, y: 0 };
             dbg(`InputHandler: Ball released v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)}) px/step.`);
+            Capture.recordRelease(this.game, this.captureSamples, v, this.game.currentBall);
             this.game.releaseCarriedBall(v.x, v.y);
             return;
         }

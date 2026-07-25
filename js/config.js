@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v42',
+    VERSION: 'v44',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -180,6 +180,16 @@ var CONFIG = {
         MIN_MS: 8,         // Tick duration at MIN_IMPACT
         MAX_MS: 24,        // Tick duration at REF_IMPACT
         MIN_GAP_MS: 45     // Rate limit: rattle ticks stay crisp, not mushy
+    },
+
+    // --- THE REPEATABILITY INSTRUMENT (debug; see js/capture.js) ---
+    // ENABLED locks the hoop, turns the top-centre label into a REC
+    // counter, and retains every gesture's raw samples for offline
+    // estimator/window analysis. Tap the counter to export; C clears.
+    CAPTURE: {
+        ENABLED: true,
+        TARGET_THROWS: 20,
+        RETAIN_MS: 400   // Gesture history kept per throw (>> any window tested)
     },
 
     GAME: {

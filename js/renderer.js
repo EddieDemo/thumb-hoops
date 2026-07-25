@@ -420,6 +420,17 @@ Renderer.prototype.drawScore = function(game) {
  * exists - a first-time player sees nothing to explain.
  */
 Renderer.prototype.drawBestStreak = function(game) {
+    // INSTRUMENT: while capturing, the label is the session counter - tap
+    // it to export. Drawn BEFORE the earned-before-shown guard below: the
+    // counter must be visible from throw zero.
+    if (Capture.enabled()) {
+        const rec = this.getCachedText('best', 'REC ' + Capture.count() + '/' + Capture.target(),
+            '600', game.cellRes * 0.5, game.themeColors.BEST);
+        const cx = (game.COLUMNS * game.cellRes) / 2;
+        this.c.drawImage(rec.canvas, cx - rec.w / 2, game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
+        return;
+    }
+
     if (game.bestStreak <= 0) return;
     // THE DAILY RECORD replaces the all-time BEST on the glass (all-time
     // persists in storage for the future clubhouse overlay). Reads as

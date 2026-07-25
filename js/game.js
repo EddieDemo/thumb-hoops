@@ -74,7 +74,10 @@ function Game() {
     // - or any arbitrary seed - is exhibition. Emergent nicety: playing
     // tomorrow's court early is automatically record-safe practice, and
     // the identical ladder starts counting at midnight.
-    this.isCustomCourt = this.courtSeed !== RNG.todaySeed();
+    // INSTRUMENT: a capture session is EXHIBITION too - twenty deliberate
+    // throws at a locked hoop must never charge strokes against today's
+    // real record.
+    this.isCustomCourt = this.courtSeed !== RNG.todaySeed() || Capture.enabled();
     Palette.setFixedHue(RNG.hueFor(this.courtSeed)); // The court's colour
 
     // --- THE DAILY LEDGER ---
@@ -307,7 +310,14 @@ Game.prototype.createHoop = function() {
     // Falls back to legacy random placement while the cache warms.
     let cell1 = null;
     if (CONFIG.GAME.SOLVER.ENABLED) {
-        const placed = Solver.choosePlacementForStreak(this, this.score);
+        // INSTRUMENT: the session's hoop never moves - "twenty identical
+        // throws" only means something against a fixed target. The first
+        // placement dealt becomes the lock.
+        let placed = Capture.enabled() ? Capture.lockedPlacement() : null;
+        if (!placed) {
+            placed = Solver.choosePlacementForStreak(this, this.score);
+            if (Capture.enabled()) Capture.lockPlacement(placed);
+        }
         if (placed) {
             this.difficulty = placed.width; // Width emerges from the band
             cell1 = { gridX: placed.gx, gridY: placed.gy };
@@ -649,6 +659,7 @@ Game.prototype.initiateLevelResetLogic = function() {
         // restarts and scheme switches are free - putting your ball down
         // is not a stroke). Counted silently; it only surfaces when baked
         // into a new summit's price.
+        Capture.finish(false);
         if (!this.isCustomCourt) {
             this.daily.misses++;
             Persistence.save('dailyRecord', this.daily);
@@ -678,7 +689,9 @@ Game.prototype.startHoopCycle = function() {
     // stays aligned for rung 1.
     if (this.holdWorldThisReset) {
         this.holdWorldThisReset = false;
-        const placed = Solver.choosePlacementForStreak(this, this.score);
+        const placed = Capture.enabled()
+            ? Capture.lockedPlacement()
+            : Solver.choosePlacementForStreak(this, this.score);
         const cp = this.currentPlacement;
         if (placed && cp && placed.gx === cp.gx && placed.gy === cp.gy && placed.width === cp.width) {
             this.difficulty = placed.width;
@@ -926,7 +939,7 @@ Game.prototype.startFateTransit = function(mode) {
     // falling from 7 back to 1 is real news even if the furniture matches.
     if (mode === 'miss' && this.score === 0 && CONFIG.GAME.SOLVER.ENABLED &&
         this.currentPlacement && typeof Solver !== 'undefined' && Solver.peekFirstRung) {
-        const next = Solver.peekFirstRung(this);
+        const next = Capture.enabled() ? Capture.lockedPlacement() : Solver.peekFirstRung(this);
         const cp = this.currentPlacement;
         if (next && next.gx === cp.gx && next.gy === cp.gy && next.width === cp.width) {
             this.fateTransit.holdWorld = true;
@@ -955,6 +968,7 @@ Game.prototype.startFateTransit = function(mode) {
  * persistence) is the Game's concern.
  */
 Game.prototype.registerScore = function() {
+    Capture.finish(true);
     this.score++;
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);
@@ -1130,6 +1144,7 @@ Game.prototype.checkShotPromotion = function() {
     const lineY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
     if (ball.prePixelY >= lineY && ball.pixelY < lineY) {
         dbg('Game: ball exited the zone - promoted to SHOT.');
+        Capture.markPromoted();
         this.hasScored = false;
         this.roundInvalidated = false;
         this.fateTransit = null; // Fresh fate for the official attempt
