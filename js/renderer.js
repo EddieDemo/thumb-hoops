@@ -120,6 +120,7 @@ Renderer.prototype.drawFrame = function() {
     // Layer 5 + 6: the world and its echoes
     this.drawGameObjects(game.nodes);
     this.drawGameObjects(game.lines); // Hoops
+    this.drawGhostBall(game);         // Teaching ghost (level one only)
     this.drawGameObjects(game.effects); // Detached one-shot effects (echoes)
 
     // --- Trajectory Path Drawing ---
@@ -291,6 +292,94 @@ Renderer.prototype.drawSchemeToggle = function(game) {
     const centerY = 0.5 * game.cellRes;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * THE GHOST BALL: a faint ball hovering above the rim, dwelling high and
+ * dipping toward it, with a short fall of dots closing the gap - the
+ * wordless answer to "which way does the ball go through?". First-run
+ * scaffolding: level one only, then it dissolves.
+ *
+ * It borrows the hoop's own choreography rather than inventing its own -
+ * entering last (after the line finishes drawing) and leaving on the same
+ * element-exit signal the pegs read, so it can never outlive the world it
+ * belongs to.
+ */
+Renderer.prototype.drawGhostBall = function(game) {
+    const G = CONFIG.RENDER.GHOST_BALL;
+    if (!G || !G.ENABLED) return;
+    if (game.score >= G.SHOW_WHILE_STREAK_BELOW) return;
+    const hoop = game.lines[0];
+    if (!hoop || !hoop.node1 || !hoop.node2) return;
+
+    const M = CONFIG.MOTION;
+    // Entry: the last element to arrive in the hoop's sequence.
+    const spawn = hoop.spawnTime + (M.LINE_DELAY_MS + M.LINE_DRAW_MS + G.ENTRY_DELAY_MS) / 1000;
+    const age = game.worldTime - spawn;
+    if (age <= 0) return;
+    const e = Motion.progress(age, 0, M.PEG_POP_MS / 1000);
+    const entry = e >= 1 ? 1 : Motion.easeOutBack(e);
+
+    // Exit: the same signal the pegs use - plain deflation, no bow.
+    const exit = game.getElementExitT();
+    const presence = Math.max(0, entry * (1 - exit));
+    if (presence <= 0.001) return;
+
+    // The bob: parabolic in time, so it DWELLS at the top (as a real ball
+    // does at apex) and passes quickly through the point nearest the rim.
+    const p = ((game.worldTime * 1000) % G.PERIOD_MS) / G.PERIOD_MS;
+    const d = (2 * p - 1) * (2 * p - 1);      // 1 at the dip, 0 at the top
+    const gap = (G.GAP_LOW + (G.GAP_TOP - G.GAP_LOW) * (1 - d)) * game.cellRes;
+
+    const cx = (hoop.node1.pixelX + hoop.node2.pixelX) / 2;
+    const rimY = hoop.node1.pixelY;
+    const y = rimY - gap;
+    const R = game.radius * presence;
+    const alpha = G.ALPHA * (0.7 + 0.3 * d) * presence;
+
+    // The glyph: an arrow whose TIP sits at the bob position, pointing
+    // down at the rim. Stroke weight matches the hoop line so it speaks
+    // the board's own language rather than importing an icon.
+    const c = this.c;
+    const prevAlpha = c.globalAlpha, prevCap = c.lineCap;
+    c.fillStyle = game.themeColors.INK;
+    c.strokeStyle = game.themeColors.INK;
+    c.lineCap = 'round';
+    c.globalAlpha = alpha;
+
+    const halfW = game.cellRes * G.WIDTH * presence;
+    const h = game.cellRes * G.HEIGHT * presence;
+    const lw = CONFIG.RENDER.HOOP_LINE_WIDTH; // Same weight as the hoop line and walls
+
+    if (G.STYLE === 'triangle') {
+        c.beginPath();
+        c.moveTo(cx - halfW, y - h); c.lineTo(cx + halfW, y - h); c.lineTo(cx, y);
+        c.closePath(); c.fill();
+    } else if (G.STYLE === 'double') {
+        // Two chevrons, the trailing one fainter - a hint of travel.
+        c.lineWidth = lw;
+        for (let k = 0; k < 2; k++) {
+            const yy = y - k * (h + game.cellRes * 0.10);
+            c.globalAlpha = alpha * (1 - 0.45 * k);
+            c.beginPath();
+            c.moveTo(cx - halfW, yy - h * 0.78); c.lineTo(cx, yy); c.lineTo(cx + halfW, yy - h * 0.78);
+            c.stroke();
+        }
+    } else {
+        // 'chevron' (default) and 'stem'
+        c.lineWidth = lw;
+        c.beginPath();
+        c.moveTo(cx - halfW, y - h); c.lineTo(cx, y); c.lineTo(cx + halfW, y - h);
+        c.stroke();
+        if (G.STYLE === 'stem') {
+            c.beginPath();
+            c.moveTo(cx, y - h - game.cellRes * 0.34 * presence);
+            c.lineTo(cx, y - h * 0.15);
+            c.stroke();
+        }
+    }
+    c.globalAlpha = prevAlpha;
+    c.lineCap = prevCap;
 };
 
 /**

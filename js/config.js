@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v46',
+    VERSION: 'v47',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -298,6 +298,41 @@ var CONFIG = {
         // NOTE: DOWNSAMPLE_SCALE removed. Rendering resolution now derives
         // from window.devicePixelRatio (see Game.redefineVariables) - crisp
         // on every display at a fraction of the old 4x supersampling cost.
+        // --- GHOST BALL: the wordless "it comes down through here" ---
+        // A ball-sized ghost hovering above the rim, dwelling high and
+        // dipping toward it (parabolic, so it hangs at the top like a real
+        // ball at apex), with a short fall of dots closing the gap. Enters
+        // last in the hoop's choreography and leaves with the pegs.
+        // Scaffolding dissolves: shown only while the streak is below
+        // SHOW_WHILE_STREAK_BELOW (1 = level one only, 0 = never).
+        GHOST_BALL: {
+            ENABLED: true,
+            SHOW_WHILE_STREAK_BELOW: 1,
+            // 'chevron' (bare v) | 'stem' (v with a shaft) |
+            // 'triangle' (filled) | 'double' (two chevrons, trailing fainter)
+            STYLE: 'chevron',
+            // Deliberately below full ink: in this world full ink means
+            // MATTER (ball, pegs, hoop line - things with collision). The
+            // chevron is a hint, not a thing, so it sits in the lighter
+            // register the trail and prediction path use. 1.0 = exactly
+            // the ball's colour, if that reading is ever preferred.
+            ALPHA: 0.45,          // at the top of the bob; firms as it dips
+            WIDTH: 0.15,          // half-width, cells
+            HEIGHT: 0.17,         // tip to shoulders, cells
+            // Stroke weight is DERIVED from the hoop line rather than
+            // duplicated, so the arrow keeps speaking the board's language
+            // if that weight is ever retuned. (The boundary is stroked on
+            // the canvas edge, so only half its 2px shows - the same 1px.)
+            // Measured tip-to-rim. The dip closes to one node DIAMETER
+            // (2 x NRADIUS_SCALE = 0.20 cells) - near enough to read as
+            // "into here" without touching the line. Same amplitude as
+            // before (0.43 cells), translated down.
+            GAP_TOP: 0.63,        // cells above the rim, top of the bob
+            GAP_LOW: 0.20,        // cells above the rim, bottom of the dip
+            PERIOD_MS: 1400,
+            ENTRY_DELAY_MS: 120   // after the hoop line finishes drawing
+        },
+
         GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
         BOUNDARY_LINE_WIDTH: 2,
         SHOOT_LINE_WIDTH: 1,

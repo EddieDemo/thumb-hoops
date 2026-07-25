@@ -583,9 +583,28 @@ Game.prototype.updateFateTransit = function() {
         else {
         if (ft.exitT === undefined) ft.exitT = 0;
         const honestyY = hoopY + this.radius + this.nRadius;
-        if (ball.pixelY >= honestyY) {
-            const exitSpan = endY - honestyY; // Same reachable endpoint
-            const exitRaw = exitSpan > 1 ? (ball.pixelY - honestyY) / exitSpan : 1;
+
+        // WHERE THE EXIT BEGINS. It used to be the honesty line, always -
+        // correct for a shot that dies AT the hoop (the ball is right
+        // there, so the exit starts at zero), but wrong for one that never
+        // got there: the ball is already far below that line when its fate
+        // seals, so the very first frame computed a large fraction and the
+        // elements snapped to half-exited. Worse in flick, where potential
+        // energy is conserved in free flight, so a hopeless throw seals at
+        // launch - near the floor.
+        //
+        // Start instead from the ball's own high-water mark (its apex,
+        // tracked because the seal can precede it), clamped to never begin
+        // above the honesty line so the shrink still can't start while a
+        // peg contact remains possible. Normal shots are unaffected: they
+        // seal at the hoop, above the line, so the line still wins.
+        ft.exitStartY = (ft.exitStartY === undefined)
+            ? Math.max(honestyY, ball.pixelY)
+            : Math.max(honestyY, Math.min(ft.exitStartY, ball.pixelY));
+
+        if (ball.pixelY >= ft.exitStartY) {
+            const exitSpan = endY - ft.exitStartY; // Same reachable endpoint
+            const exitRaw = exitSpan > 1 ? (ball.pixelY - ft.exitStartY) / exitSpan : 1;
             ft.exitT = Math.max(ft.exitT, Math.min(1, exitRaw));
         }
         if (ft.done) ft.exitT = 1;
