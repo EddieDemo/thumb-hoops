@@ -164,15 +164,31 @@ function Game() {
  * Called on start and resize.
  */
 Game.prototype.redefineVariables = function() {
-    // Fit the board to BOTH viewport dimensions so it never overflows narrow
-    // screens (previously height-only, which overflowed most portrait phones).
-    this.cellRes = Math.min(
-        window.innerHeight / this.ROWS,
-        window.innerWidth / this.COLUMNS
-    );
+    // CAMERA SEPARATED FROM WORLD. The world is always 6x11 - physics, the
+    // hoop table, the ladder and seeded courts all depend on that and must
+    // never change with screen size. What changes is how much of it you
+    // SEE. The board fills the viewport's width (so the side walls are the
+    // screen edges, with no margins eating play space) and the viewport
+    // simply crops the top, where only empty sky lives: hoops occupy rows
+    // 2-5, the shoot zone rows 7-10.
+    //
+    // The floor is pinned to the bottom of the screen, which is also where
+    // the thumb is. On a viewport too short to show the rows that matter
+    // (rows 2-10), cell size falls back to whatever fits those - still
+    // larger than fitting all eleven.
+    const viewW = window.innerWidth, viewH = window.innerHeight;
+    this.cellRes = Math.min(viewW / this.COLUMNS, viewH / CONFIG.RENDER.MIN_VISIBLE_ROWS);
 
-    const logicalWidth  = this.COLUMNS * this.cellRes;
-    const logicalHeight = this.ROWS * this.cellRes;
+    const worldHeight = this.ROWS * this.cellRes;
+    // Where world y=0 lands on screen. Negative = the sky is cropped.
+    this.worldOffsetY = viewH - worldHeight;
+    // World y at the top of the VISIBLE area - what screen-anchored UI
+    // (record label, theme glyph) must hang from instead of the world top.
+    this.viewTopY = Math.max(0, -this.worldOffsetY);
+
+    this.viewW = viewW; this.viewH = viewH;   // The camera's aperture
+    const logicalWidth  = viewW;
+    const logicalHeight = viewH;
 
     // Render at the display's native pixel density (clamped - beyond 3x the
     // cost quadruples for imperceptible gain). Re-read every call so moving
@@ -186,8 +202,9 @@ Game.prototype.redefineVariables = function() {
     this.canvas.style.height = logicalHeight + "px";
 
     // Absolute transform (not scale()): repeated resizes can never compound.
-    // From here on, ALL drawing happens in logical pixels.
-    this.c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // The camera offset rides IN the transform, so every drawing call keeps
+    // speaking pure world coordinates and none of them had to change.
+    this.c.setTransform(this.dpr, 0, 0, this.dpr, 0, this.worldOffsetY * this.dpr);
 
     this.rect = this.canvas.getBoundingClientRect(); // Update cached canvas bounds
 

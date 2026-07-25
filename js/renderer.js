@@ -84,6 +84,11 @@ Renderer.prototype.drawFrame = function() {
     // sub-pixel misalignment between the two worlds invisible by
     // construction.
     this.c.fillStyle = game.themeColors.BACKGROUND;
+    // Clear the WHOLE aperture first (world coords, so the camera offset is
+    // already applied): anything the court doesn't cover must go back to
+    // transparent, letting the body's checkerboard surround show through
+    // exactly as before - otherwise the band above the board would smear.
+    this.c.clearRect(0, -game.worldOffsetY, game.viewW, game.viewH);
     this.c.fillRect(0, 0, game.COLUMNS * game.cellRes, game.ROWS * game.cellRes);
     // NOTE: theme application no longer happens here - applyTheme() runs once
     // at startup and once per toggle. The frame loop never touches the DOM.
@@ -413,7 +418,7 @@ Renderer.prototype.drawThemeToggle = function(game) {
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
     // lattice, not to a floating margin.
     const centerX = (game.COLUMNS - 0.5) * game.cellRes;
-    const centerY = 0.5 * game.cellRes;
+    const centerY = game.viewTopY + 0.5 * game.cellRes;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
 };
@@ -516,14 +521,14 @@ Renderer.prototype.drawBestStreak = function(game) {
         const cx = (game.COLUMNS * game.cellRes) / 2;
         const rec = this.getCachedText('best', 'REC ' + Capture.count() + '/' + Capture.target(),
             '600', game.cellRes * 0.5, game.themeColors.BEST);
-        this.c.drawImage(rec.canvas, cx - rec.w / 2, game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
+        this.c.drawImage(rec.canvas, cx - rec.w / 2, game.viewTopY + game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
         // Testers usually receive this link without anyone beside them:
         // the protocol has to be legible on the glass itself.
         const done = Capture.count() >= Capture.target();
         const hint = this.getCachedText('captureHint',
             done ? 'TAP HERE TO SEND' : 'SAME THROW EVERY TIME',
             '400', game.cellRes * 0.26, game.themeColors.BEST);
-        this.c.drawImage(hint.canvas, cx - hint.w / 2, game.cellRes * 1.45 - hint.h / 2, hint.w, hint.h);
+        this.c.drawImage(hint.canvas, cx - hint.w / 2, game.viewTopY + game.cellRes * 1.45 - hint.h / 2, hint.w, hint.h);
         return;
     }
 
@@ -544,7 +549,7 @@ Renderer.prototype.drawBestStreak = function(game) {
         game.cellRes * 0.5, game.themeColors.BEST);
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
-        centerX - cached.w / 2, game.cellRes * 0.9 - cached.h / 2, cached.w, cached.h);
+        centerX - cached.w / 2, game.viewTopY + game.cellRes * 0.9 - cached.h / 2, cached.w, cached.h);
 };
 
 Renderer.prototype.drawCanvasBoundary = function(game) {

@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v47',
+    VERSION: 'v48',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -108,6 +108,18 @@ var CONFIG = {
         FLICK: {
             SAMPLE_WINDOW_MS: 80,   // Gesture window sampled for velocity
             VELOCITY_SCALE: 1.0,    // Gesture px/ms -> launch scaling knob
+
+            // DEVICE NEUTRALITY. The simulation is scale-similar (gravity,
+            // radii and speeds all scale with cellRes), but the gesture
+            // arrives in screen pixels - so without this the same physical
+            // flick travels FEWER CELLS on a bigger board, and the game is
+            // harder on large phones than small ones. Ruinous for a shared
+            // daily court. Every px/step figure below is therefore quoted
+            // at this reference cell size and scaled by cellRes/REFERENCE
+            // at use, which makes a given thumb movement produce the same
+            // trajectory everywhere. 58.3 is the geometry the feel was
+            // tuned and captured at.
+            REFERENCE_CELL: 58.3,
             // Carry is clamped to the shoot zone: you can't walk the ball
             // up the court and drop it in - every throw starts below the
             // line, so every committed shot is upward, like drag.
@@ -332,6 +344,11 @@ var CONFIG = {
             PERIOD_MS: 1400,
             ENTRY_DELAY_MS: 120   // after the hoop line finishes drawing
         },
+
+        // The camera crops the sky, never the play. Rows 2-10 (highest hoop
+        // down to the floor) must always be on screen; below that the cell
+        // size shrinks to fit them rather than cropping into the game.
+        MIN_VISIBLE_ROWS: 9,
 
         GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
         BOUNDARY_LINE_WIDTH: 2,

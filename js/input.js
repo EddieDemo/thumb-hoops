@@ -100,7 +100,12 @@ InputHandler.prototype.computeFlickVelocity = function() {
     if (stt <= 0) return null; // All samples at one instant - unmeasurable
     const pxPerMs = { x: stx / stt, y: sty / stt };
     const msPerStep = 1000 / CONFIG.PHYSICS.STEP_HZ;
-    const k = msPerStep * CONFIG.INPUT.FLICK.VELOCITY_SCALE;
+    // Device neutrality: scale the gesture into the board's own units, so
+    // the same physical flick yields the same CELLS travelled on every
+    // screen size (see REFERENCE_CELL). At the reference geometry this
+    // factor is exactly 1 and nothing changes.
+    const scale = this.game.cellRes / CONFIG.INPUT.FLICK.REFERENCE_CELL;
+    const k = msPerStep * CONFIG.INPUT.FLICK.VELOCITY_SCALE * scale;
     const raw = { x: pxPerMs.x * k, y: pxPerMs.y * k };
 
     // Gesture gain curve: gain ~1 at low speeds (delicate lobs keep 1:1
@@ -109,7 +114,11 @@ InputHandler.prototype.computeFlickVelocity = function() {
     // sensor noise at the precision end. BOOST 1.0 = exactly linear.
     const F = CONFIG.INPUT.FLICK;
     const speed = Math.sqrt(raw.x * raw.x + raw.y * raw.y);
-    const gain = 1 + (F.GAIN_BOOST - 1) * Math.min(1, speed / F.GAIN_REF_SPEED);
+    // Both pivots are quoted at the reference cell, so they must ride the
+    // same scale - otherwise a bigger board sits further up the curve and
+    // gets a different amount of help.
+    const gainRef = F.GAIN_REF_SPEED * scale;
+    const gain = 1 + (F.GAIN_BOOST - 1) * Math.min(1, speed / gainRef);
     let vx = raw.x * gain, vy = raw.y * gain;
 
     // Power compression: pivots at POWER_REF (identity there), pulling
@@ -118,8 +127,9 @@ InputHandler.prototype.computeFlickVelocity = function() {
     const p = F.POWER_EXPONENT;
     if (p !== 1) {
         const sp = Math.sqrt(vx * vx + vy * vy);
+        const powerRef = F.POWER_REF * scale;
         if (sp > 0.0001) {
-            const out = F.POWER_REF * Math.pow(sp / F.POWER_REF, p);
+            const out = powerRef * Math.pow(sp / powerRef, p);
             const k = out / sp;
             vx *= k; vy *= k;
         }
@@ -144,9 +154,11 @@ InputHandler.prototype.computeFlickVelocity = function() {
  */
 InputHandler.prototype.getCanvasPos = function(event) {
     const rect = this.game.rect; // Cached bounds, refreshed on resize
+    // Undo the camera: the canvas spans the viewport, but the world may be
+    // scrolled up inside it. Everything downstream works in world space.
     return {
         x: event.clientX - rect.left,
-        y: event.clientY - rect.top
+        y: (event.clientY - rect.top) - this.game.worldOffsetY
     };
 };
 
