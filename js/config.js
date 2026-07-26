@@ -359,6 +359,22 @@ var CONFIG = {
         //       Safari (1.63) just misses - that was the 4px margin
         HOOP_SKY_CELLS: 0.5,
 
+        // The court's edge used to be drawn as a stroke around the whole
+        // board. It isn't needed any more: vertically the checkerboard
+        // surround continues seamlessly past the floor and sky (there is
+        // no edge to announce), and horizontally the walls now declare
+        // themselves by what lies beyond them - a flat inverse field.
+        DRAW_BOUNDARY: false,
+
+        // Beyond the side walls: the tonal opposite of the mode, so the
+        // court reads as lit space and everything outside it as solid
+        // nothing. Only ever visible when the viewport is wider than the
+        // board (desktop, tablets); phones fill the width and see none of
+        // it. Above and below the court the checkerboard continues as
+        // before - the world extends vertically, but ends at the walls.
+        SIDE_FILL_LIGHT: '#000000',   // shown while the game is in LIGHT mode
+        SIDE_FILL_DARK:  '#ffffff',   // shown while the game is in DARK mode
+
         // --- The level numeral's turn-over ---
         // The numeral belongs to the ROUND, not to the live score: it holds
         // the level you're attempting until the world actually changes,

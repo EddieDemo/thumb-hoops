@@ -90,6 +90,7 @@ Renderer.prototype.drawFrame = function() {
     // exactly as before - otherwise the band above the board would smear.
     this.c.clearRect(-game.worldOffsetX, -game.worldOffsetY, game.viewW, game.viewH);
     this.c.fillRect(0, 0, game.COLUMNS * game.cellRes, game.ROWS * game.cellRes);
+    this.drawSideFill(game);
     // NOTE: theme application no longer happens here - applyTheme() runs once
     // at startup and once per toggle. The frame loop never touches the DOM.
 
@@ -119,7 +120,7 @@ Renderer.prototype.drawFrame = function() {
     this.drawVersionTag(game);   // Deploy verification, bottom-left cell
 
     // Layer 4: frame and shoot line
-    this.drawCanvasBoundary(game);
+    if (CONFIG.RENDER.DRAW_BOUNDARY) this.drawCanvasBoundary(game);
     this.drawShootBoundaryLine(game);
 
     // Layer 5 + 6: the world and its echoes
@@ -620,6 +621,23 @@ Renderer.prototype.drawBestStreak = function(game) {
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, game.viewTopY + game.cellRes * 0.9 - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * Beyond the side walls: a flat inverse field, so the wall needs no line
+ * to announce itself - the world simply stops. Full viewport height, so
+ * the corners belong to the outside rather than to the sky. Drawn only
+ * when the viewport is wider than the board; on a phone it never runs.
+ */
+Renderer.prototype.drawSideFill = function(game) {
+    const pad = game.worldOffsetX;
+    if (pad <= 0.5) return;
+    const dark = (typeof isDarkMode === 'function' && isDarkMode());
+    const c = this.c;
+    c.fillStyle = dark ? CONFIG.RENDER.SIDE_FILL_DARK : CONFIG.RENDER.SIDE_FILL_LIGHT;
+    const top = -game.worldOffsetY;
+    c.fillRect(-pad, top, pad, game.viewH);
+    c.fillRect(game.COLUMNS * game.cellRes, top, pad, game.viewH);
 };
 
 Renderer.prototype.drawCanvasBoundary = function(game) {
