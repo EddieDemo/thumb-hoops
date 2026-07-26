@@ -180,7 +180,10 @@ Game.prototype.redefineVariables = function() {
     // (rows 2-10), cell size falls back to whatever fits those - still
     // larger than fitting all eleven.
     const viewW = window.innerWidth, viewH = window.innerHeight;
-    this.cellRes = Math.min(viewW / this.COLUMNS, viewH / CONFIG.RENDER.MIN_VISIBLE_ROWS);
+    // Rows that must stay on screen: from just above the highest hoop
+    // (row 2) down to the floor. Width wins whenever it can.
+    const minRows = this.ROWS - 2 + CONFIG.RENDER.HOOP_SKY_CELLS;
+    this.cellRes = Math.min(viewW / this.COLUMNS, viewH / minRows);
 
     const worldWidth  = this.COLUMNS * this.cellRes;
     const worldHeight = this.ROWS * this.cellRes;

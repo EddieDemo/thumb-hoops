@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v52',
+    VERSION: 'v53',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -345,12 +345,19 @@ var CONFIG = {
             ENTRY_DELAY_MS: 120   // after the hoop line finishes drawing
         },
 
-        // The camera crops the sky, never the play. Rows 1-10 must always be
-        // on screen: the highest hoop sits on row 2, so it needs a full row
-        // of sky ABOVE it - at 9 the crop line landed exactly on that hoop
-        // and sliced its pegs in half. Below this, cell size shrinks to fit
-        // rather than cropping into the game.
-        MIN_VISIBLE_ROWS: 10,
+        // How much SKY must remain above the highest hoop (row 2), in cells.
+        // This is the real constraint - expressed directly rather than as a
+        // row count, because it is what decides whether the board can fill
+        // the viewport's width. Filling the width is what removes the side
+        // margins; the board only shrinks (reintroducing them) when a
+        // viewport is too short to grant this clearance.
+        //   required rows = ROWS - 2 + HOOP_SKY_CELLS
+        //   0.0 slices the top hoop's pegs in half - never go there
+        //   0.5 clears them by ~2.5 node diameters and lets every common
+        //       phone aspect (>= 1.58) fill the width
+        //   1.0 is roomier but pushes the threshold to 1.67, which iPhone
+        //       Safari (1.63) just misses - that was the 4px margin
+        HOOP_SKY_CELLS: 0.5,
 
         // --- The level numeral's turn-over ---
         // The numeral belongs to the ROUND, not to the live score: it holds
@@ -365,13 +372,16 @@ var CONFIG = {
             ENTRY_MS: 200,   // Matches MOTION.PEG_POP_MS by default
 
             SIZE_CELLS: 4,   // Cap height in cells (was 2)
-            // Drawn with real transparency rather than a pre-faded colour,
-            // so the grid's checkerboard reads THROUGH the numeral instead
-            // of being hidden by it - the number becomes a window onto the
-            // lattice rather than a panel laid over it. COLOR 'ink' lets
-            // ALPHA do all the work; 'score' restores the old flat,
-            // contrast-calibrated fill (use ALPHA 1 with it).
-            COLOR: 'ink',
+
+            // Transparency is a REQUEST, not a colour. The numeral's
+            // on-screen appearance is still solved to the theme's SCORE
+            // contrast target (as every other element is), and the base
+            // colour is back-solved so that drawing it at this alpha
+            // composites to exactly that. So ALPHA controls only how much
+            // checkerboard shows through - never whether the number can be
+            // seen. Where the gamut can't reach the target at this alpha
+            // (saturated backgrounds in dark mode), the renderer raises
+            // alpha to the least value that can: legibility wins.
             ALPHA: 0.12
         },
 

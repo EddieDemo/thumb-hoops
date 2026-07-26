@@ -226,6 +226,13 @@ var Palette = (function() {
             SCORE:       hsbToHex(score.H, score.S, score.B),
             BEST:        hsbToHex(best.H, best.S, best.B),
             BOUNDARY:    hsbToHex(boundary.H, boundary.S, boundary.B),
+            // The ink itself, by name. BALL/NODE/HOOP are the same value
+            // under their role names; INK is for anything that needs the
+            // ink as a MATERIAL (transparent overlays, derived tints).
+            // Asking for a key that doesn't exist is silent in canvas -
+            // fillStyle keeps its previous value - so a missing name here
+            // becomes an invisible-in-one-theme bug, not an error.
+            INK: inkHex,
             BALL: inkHex, NODE: inkHex, HOOP: inkHex,
             PREDICTION_LINE: inkHex, // Drawn at RENDER.PREDICTION_ALPHA
             GRID_STROKE: hsbToHex(cell2.H, cell2.S, cell2.B)

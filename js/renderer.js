@@ -300,6 +300,40 @@ Renderer.prototype.drawSchemeToggle = function(game) {
 };
 
 /**
+ * Back-solves a base colour that, drawn at `wantAlpha` over `bgHex`,
+ * composites to exactly `targetHex` - so a transparent element can hit a
+ * calibrated contrast target instead of hoping a fixed alpha lands well in
+ * every theme.
+ *
+ * Compositing is linear in RGB: out = a*F + (1-a)*bg, so F = bg + (T-bg)/a.
+ * Small alphas demand colours beyond black or white; rather than clip (and
+ * silently lose contrast), the alpha is raised to the least value the gamut
+ * can serve. Transparency is therefore a REQUEST, honoured wherever
+ * physically possible; legibility is not negotiable.
+ */
+Renderer.prototype.solveTransparent = function(bgHex, targetHex, wantAlpha) {
+    const parse = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    let bg, T;
+    try { bg = parse(bgHex); T = parse(targetHex); }
+    catch (e) { return { color: targetHex, alpha: 1 }; }
+    if (bg.some(isNaN) || T.some(isNaN)) return { color: targetHex, alpha: 1 };
+
+    let a = Math.max(0.001, Math.min(1, wantAlpha));
+    for (let c = 0; c < 3; c++) {
+        const d = T[c] - bg[c];
+        if (d === 0) continue;
+        const headroom = d > 0 ? (255 - bg[c]) : bg[c];
+        if (headroom <= 0) { a = 1; break; }
+        a = Math.max(a, Math.abs(d) / headroom);
+    }
+    const F = T.map((t, c) => {
+        const v = Math.round(bg[c] + (t - bg[c]) / a);
+        return Math.max(0, Math.min(255, v));
+    });
+    return { color: '#' + F.map(v => v.toString(16).padStart(2, '0')).join(''), alpha: a };
+};
+
+/**
  * THE GHOST BALL: a faint ball hovering above the rim, dwelling high and
  * dipping toward it, with a short fall of dots closing the gap - the
  * wordless answer to "which way does the ball go through?". First-run
@@ -502,10 +536,19 @@ Renderer.prototype.drawScore = function(game) {
     // framing only.)
     const N0 = CONFIG.RENDER.SCORE_NUMERAL;
     const level = (game.displayLevel !== undefined) ? game.displayLevel : game.score + 1;
-    const numeralColor = (N0 && N0.COLOR === 'score')
-        ? game.themeColors.SCORE : game.themeColors.INK;
+
+    // The numeral is TRANSPARENT (so the lattice reads through it) but its
+    // visibility must still be SOLVED, not assumed: every other element
+    // gets a role-specific contrast ratio against the live background, in
+    // both themes, at every hue and streak. So take the theme's calibrated
+    // SCORE colour as the appearance we want ON SCREEN, and back-solve the
+    // base colour that composites to it at the requested alpha. Contrast
+    // is then guaranteed by construction; alpha only decides how much
+    // checkerboard shows through.
+    const solved = this.solveTransparent(game.themeColors.BACKGROUND,
+        game.themeColors.SCORE, (N0 && N0.ALPHA !== undefined) ? N0.ALPHA : 1);
     const cached = this.getCachedText('score', String(level), '700',
-        game.cellRes * ((N0 && N0.SIZE_CELLS) || 2), numeralColor);
+        game.cellRes * ((N0 && N0.SIZE_CELLS) || 2), solved.color);
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     const centerY = (game.ROWS * game.cellRes) / 2;
 
@@ -529,7 +572,7 @@ Renderer.prototype.drawScore = function(game) {
     if (presence <= 0.001) return;
 
     const prevAlpha = this.c.globalAlpha;
-    this.c.globalAlpha = ((N && N.ALPHA !== undefined) ? N.ALPHA : 1) * presence;
+    this.c.globalAlpha = solved.alpha * presence;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
     this.c.globalAlpha = prevAlpha;
