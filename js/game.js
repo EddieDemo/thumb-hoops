@@ -981,6 +981,13 @@ Game.prototype.onBallImpact = function(impacts) {
     // independent - the same shot feels the same on any phone.
     const strength = Math.max(impacts.wallImpact, impacts.pegImpact) / this.cellRes;
     Haptics.impact(strength);
+
+    // The bronze reads the same seam - and only the peg speaks in v1:
+    // the walls and floor sound constantly now that the ball dribbles,
+    // so they are the fatigue risk and wait for their own tuning pass.
+    if (impacts.pegImpact > 0) {
+        Audio.peg(impacts.pegX, impacts.pegImpact / this.cellRes, this.cellRes);
+    }
 };
 
 /**
@@ -1036,6 +1043,7 @@ Game.prototype.startFateTransit = function(mode) {
  */
 Game.prototype.registerScore = function() {
     Capture.finish(true);
+    Audio.gong();   // the gongan closes
     this.score++;
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);

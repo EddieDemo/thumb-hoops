@@ -86,6 +86,7 @@ PhysicsEngine.prototype.stepBallState = function(state) {
     const r = state.radius || 0;
     let wallImpact = 0; // Contact speed against a wall this step (px/step)
     let pegImpact = 0;  // Strongest peg contact speed this step (px/step)
+    let pegX = 0;       // ...and that peg's x, which decides its pitch
 
     // --- Gravity, then move ---
     state.velocity.y += game.gravity;
@@ -157,6 +158,10 @@ PhysicsEngine.prototype.stepBallState = function(state) {
                 // (vDotN < 0). Tangential component is untouched.
                 const vDotN = state.velocity.x * nx + state.velocity.y * ny;
                 if (vDotN < 0) {
+                    // Remember WHICH peg spoke: its lattice position is the
+                    // note (see js/audio.js). Only the strongest contact in
+                    // a step is voiced, so the x follows that same maximum.
+                    if (-vDotN > pegImpact) pegX = node.pixelX;
                     pegImpact = Math.max(pegImpact, -vDotN); // Approach speed
                     state.velocity.x -= (1 + pegE) * vDotN * nx;
                     state.velocity.y -= (1 + pegE) * vDotN * ny;
@@ -171,7 +176,8 @@ PhysicsEngine.prototype.stepBallState = function(state) {
         }
     }
 
-    return { hitFloor: hitFloor, wallImpact: wallImpact, pegImpact: pegImpact, floorImpact: floorImpact };
+    return { hitFloor: hitFloor, wallImpact: wallImpact, pegImpact: pegImpact,
+             pegX: pegX, floorImpact: floorImpact };
 };
 
 /**

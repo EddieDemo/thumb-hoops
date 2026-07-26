@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v55',
+    VERSION: 'v56',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -230,6 +230,40 @@ var CONFIG = {
         // that capture is part of the same dataset. Set to null to fall
         // back to "whatever the solver deals first".
         PLACEMENT: { gx: 1, gy: 5, width: 2 }
+    },
+
+    // --- THE COURT'S GAMELAN (see js/audio.js) ---
+    // Bronze borrowed from the Slendro project. Slendro's five even
+    // 240-cent steps have no acoustically-home tone, so the arbitrary
+    // note sequences a physics game produces are always consonant -
+    // which is the property that makes this possible at all.
+    AUDIO: {
+        ENABLED: true,
+        MASTER: 0.45,
+
+        // Sound is enrichment, never information: most phones are muted,
+        // and everything the bronze says the screen already said.
+
+        STEP_CENTS: 240,     // sléndro: five even steps to the octave
+        PEG_HZ: 264,         // the lowest peg (lattice intersection 0)
+        PEG_DECAY_S: 1.6,    // shorter than a real bonang: the court must clear
+        PEG_GAIN: 0.9,
+        GONG_HZ: 66,         // two octaves and a bit below - the cycle closing
+        GONG_DECAY_S: 2.6,
+        GONG_GAIN: 0.85,
+
+        // Contact speed in CELLS per step, so feel is screen-independent.
+        MIN_IMPACT: 0.035,   // below this a graze stays silent
+        FULL_IMPACT: 0.55,   // and at this it strikes at full velocity
+
+        // A rattle is several contacts inside a few frames. Bronze
+        // partials overlapping is what a gamelan IS; stacked ATTACKS are
+        // what turns it into a dropped tray. Hence a floor on spacing and
+        // a ceiling on how much can ring at once.
+        MIN_INTERVAL_MS: 18,
+        MAX_VOICES: 10,      // beyond this the oldest voice is stolen, not refused
+
+        RENDER_RATE_HZ: 22050  // offline render rate for the cast buffers
     },
 
     GAME: {

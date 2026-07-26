@@ -223,6 +223,10 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // Suppress residual browser gestures (double-tap zoom on iOS, etc.)
     event.preventDefault();
 
+    // Browsers only allow an AudioContext to start inside a user gesture,
+    // so the gamelan is cast on the first touch and merely resumed after.
+    Audio.init();
+
     // Single-pointer discipline: ignore any new pointer while one is aiming.
     if (this.activePointerId !== null) return;
 
