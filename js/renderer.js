@@ -590,8 +590,12 @@ Renderer.prototype.drawScore = function(game) {
         game.themeColors.SCORE, (N0 && N0.ALPHA !== undefined) ? N0.ALPHA : 1);
     const cached = this.getCachedText('score', String(level), '700',
         game.cellRes * ((N0 && N0.SIZE_CELLS) || 2), solved.color);
+    // Centred in the PLAY AREA as seen: from the visible top down to the
+    // shoot boundary. (Not the world's midpoint - that sat below centre
+    // once the camera began cropping the sky.)
+    const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes;
     const centerX = (game.COLUMNS * game.cellRes) / 2;
-    const centerY = (game.ROWS * game.cellRes) / 2;
+    const centerY = (game.viewTopY + boundaryY) / 2;
 
     // The turn-over: the old numeral fades out on the world's element-exit
     // signal and the new one fades in with the arriving hoop. (It squashed
@@ -658,9 +662,14 @@ Renderer.prototype.drawBestStreak = function(game) {
     const label = game.daily.best + CONFIG.RENDER.RECORD_SEP2 + game.daily.missesAtBest;
     const cached = this.getCachedText('best', label, '600',
         game.cellRes * 0.5, game.themeColors.BEST);
+    // Centred in the SHOOT AREA - the day's record belongs to the player's
+    // own territory, not to the sky. Environment layer, so the resting
+    // ball passes in front of it.
+    const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes;
     const centerX = (game.COLUMNS * game.cellRes) / 2;
+    const centerY = (boundaryY + game.ROWS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
-        centerX - cached.w / 2, game.viewTopY + game.cellRes * 0.9 - cached.h / 2, cached.w, cached.h);
+        centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
 };
 
 /**
@@ -702,15 +711,26 @@ Renderer.prototype.drawCanvasBoundary = function(game) {
 };
 
 Renderer.prototype.drawShootBoundaryLine = function(game) {
-    const c = this.c; c.beginPath(); c.setLineDash([]);
+    const c = this.c;
     // While the finger is still below the line mid-aim, releasing would
-    // ABORT - the line firms up to say "you're still in your own
+    // ABORT - the boundary firms up to say "you're still in your own
     // territory", settling the moment the drag crosses into commitment.
-    // Zero text; the line's second job.
+    // Zero text; the boundary's second job. It used to firm by thickening
+    // a rule; now it firms by weight of dot.
     const armed = game.wouldReleaseAbort();
-    c.strokeStyle = game.themeColors.BOUNDARY;
-    c.lineWidth = armed ? CONFIG.RENDER.SHOOT_LINE_HELD_WIDTH
-                        : CONFIG.RENDER.SHOOT_LINE_WIDTH;
+    const rad = game.cellRes * (armed ? CONFIG.RENDER.SHOOT_DOT_RADIUS_HELD
+                                      : CONFIG.RENDER.SHOOT_DOT_RADIUS);
     const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes;
-    c.moveTo(0, boundaryY); c.lineTo(game.COLUMNS * game.cellRes, boundaryY); c.stroke();
+    c.fillStyle = game.themeColors.BOUNDARY;
+    // Half-cell spacing across the middle of the board, clear of both
+    // walls - the boundary is a measure laid across the court, not a rule
+    // fixed to its edges, and nothing is left half-clipped at the screen.
+    const step = CONFIG.RENDER.SHOOT_DOT_STEP;
+    const from = CONFIG.RENDER.SHOOT_DOT_INSET;
+    const to = game.COLUMNS - from;
+    for (let x = from; x <= to + 1e-9; x += step) {
+        c.beginPath();
+        c.arc(x * game.cellRes, boundaryY, rad, 0, Math.PI * 2);
+        c.fill();
+    }
 };

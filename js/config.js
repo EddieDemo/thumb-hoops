@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v54',
+    VERSION: 'v55',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -407,6 +407,24 @@ var CONFIG = {
         // Shoot line width while an aim's release would ABORT (finger still
         // below the line): firmer, meaning "let go here and nothing fires".
         SHOOT_LINE_HELD_WIDTH: 2.5,
+
+        // The shoot boundary is drawn as DOTS at the grid intersections on
+        // its row, not as a rule across the board: the lattice already
+        // knows where that line is, so marking its crossings states the
+        // boundary in the world's own vocabulary instead of laying a
+        // foreign stroke over it. Radii in cells; the held size is the
+        // line's old "you're still in your own territory" firming, now
+        // expressed as weight rather than thickness. Pegs are 0.10 cells,
+        // so these stay clearly lighter than matter.
+        SHOOT_DOT_RADIUS: 0.035,
+        SHOOT_DOT_RADIUS_HELD: 0.055,
+        // Spacing and inset in cells: dots run from INSET to COLUMNS-INSET
+        // in STEP increments. At 0.5/1 that marks every half-cell across
+        // the middle four columns and leaves the wall-adjacent cells bare,
+        // so the boundary reads as a measure laid across the court rather
+        // than a rule welded to the walls. (6 columns -> 9 dots.)
+        SHOOT_DOT_STEP: 0.5,
+        SHOOT_DOT_INSET: 1,
         // HOOP_LINE_WIDTH_SCALE: 1 / 15, // << COMMENTED OUT: Old relative scale
         HOOP_LINE_WIDTH: 1,     // << ADDED: Fixed hoop line width in pixels
         // TRIAL (mobile-first pass): the visible grid is INFORMATION, not
