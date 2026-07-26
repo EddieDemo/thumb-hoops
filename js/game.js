@@ -988,6 +988,12 @@ Game.prototype.onBallImpact = function(impacts) {
     if (impacts.pegImpact > 0) {
         Audio.peg(impacts.pegX, impacts.pegImpact / this.cellRes, this.cellRes);
     }
+    if (impacts.wallImpact > 0) {
+        Audio.wall(impacts.wallY, impacts.wallImpact / this.cellRes, this.cellRes, this.ROWS);
+    }
+    if (impacts.floorImpact > 0) {
+        Audio.floor(impacts.floorImpact / this.cellRes, this.cellRes);
+    }
 };
 
 /**

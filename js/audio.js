@@ -49,7 +49,8 @@ var Audio = (function() {
     let ready = false;          // buffers rendered
     let failed = false;         // this device can't, and that's fine
     let voices = null;          // { pegSoft, pegHard, gong }
-    let lastStrikeAt = -Infinity;
+    let lastStrikeAt = -Infinity;   // pegs
+    let lastLowAt = -Infinity;      // walls and floor, limited separately
     let live = [];              // sources still ringing, for the polyphony cap
 
     function cfg() { return CONFIG.AUDIO; }
@@ -78,6 +79,19 @@ var Audio = (function() {
             strike: { fMul: 5, q: 1.2, level: 0.30, decay: 0.012 },
             ombak: { beatHz: 0, depth: 0 },
             attack: 0.003
+        },
+        low: {   // slenthem: the lowest, longest, quietest bar in the family -
+                 // and the one struck with a padded mallet, so barely a knock.
+                 // The world's edges should be felt more than heard.
+            partials: [
+                { r: 1.000, g: 1.00, d: 1.00 },
+                { r: 2.756, g: 0.42, d: 0.42 },
+                { r: 5.404, g: 0.18, d: 0.22 },
+                { r: 8.933, g: 0.07, d: 0.12 }
+            ],
+            strike: { fMul: 6, q: 1.0, level: 0.12, decay: 0.015 },
+            ombak: { beatHz: 0, depth: 0 },
+            attack: 0.002
         },
         gong: {
             partials: [
@@ -188,9 +202,12 @@ var Audio = (function() {
         Promise.all([
             renderVoice(VOICES.peg, c.PEG_HZ, c.PEG_DECAY_S, 0.35),
             renderVoice(VOICES.peg, c.PEG_HZ, c.PEG_DECAY_S, 1.0),
-            renderVoice(VOICES.gong, c.GONG_HZ, c.GONG_DECAY_S, 0.9)
+            renderVoice(VOICES.gong, c.GONG_HZ, c.GONG_DECAY_S, 0.9),
+            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 0.35),
+            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 1.0)
         ]).then(bufs => {
-            voices = { pegSoft: bufs[0], pegHard: bufs[1], gong: bufs[2] };
+            voices = { pegSoft: bufs[0], pegHard: bufs[1], gong: bufs[2],
+                       lowSoft: bufs[3], lowHard: bufs[4] };
             ready = true;
             dbg('Audio: bronze cast.');
         }).catch(() => {
@@ -273,6 +290,62 @@ var Audio = (function() {
         play(buf, rate, c.PEG_GAIN * (0.35 + 0.65 * vel), now, true);
     }
 
+    /**
+     * A WALL spoke. The walls run the height of the board, so they carry
+     * the ladder vertically: low at the floor, rising as you climb. The
+     * pegs' ladder is horizontal, so between them the whole lattice is
+     * playable - but an octave down and much quieter, because an edge of
+     * the world should be felt more than heard.
+     */
+    function wall(y, strength, cellRes, rows) {
+        if (!enabled() || !ready || !ctx) return;
+        const c = cfg();
+        if (strength < c.MIN_IMPACT_LOW) return;
+
+        const now = ctx.currentTime;
+        reap(now);
+        if (now - lastLowAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
+        while (live.length >= c.MAX_VOICES) steal(now);
+        lastLowAt = now;
+
+        // Screen y grows downward; pitch rises as the ball climbs. The
+        // board's whole height is spread across ONE octave of rungs rather
+        // than climbing freely - an unbounded ladder reached above the
+        // pegs' lowest note, and an edge of the world that out-sings the
+        // thing you are aiming at has stopped being an edge.
+        // Spread over the height the ball actually USES: the top row is
+        // sky the ball leaves the screen through, so measuring against it
+        // wasted the ladder's top rung on a place nothing ever hits.
+        const h = Math.max(0, Math.min(1, (rows - y / cellRes) / (rows - 1)));
+        const degree = Math.round(h * (c.WALL_RUNGS - 1));
+        const cents = degree * c.STEP_CENTS;
+        const vel = Math.min(1, strength / c.FULL_IMPACT);
+        const buf = vel < 0.5 ? voices.lowSoft : voices.lowHard;
+        play(buf, Math.pow(2, cents / 1200), c.WALL_GAIN * (0.3 + 0.7 * vel), now, true);
+    }
+
+    /**
+     * The FLOOR spoke. One pitch, always: the floor is the ground, not a
+     * ladder. It also fires more than anything else in the game now that
+     * the ball dribbles and settles, which makes it the fatigue risk -
+     * so it is the quietest thing here and it never changes note.
+     */
+    function floor(strength, cellRes) {
+        if (!enabled() || !ready || !ctx) return;
+        const c = cfg();
+        if (strength < c.MIN_IMPACT_FLOOR) return;
+
+        const now = ctx.currentTime;
+        reap(now);
+        if (now - lastLowAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
+        while (live.length >= c.MAX_VOICES) steal(now);
+        lastLowAt = now;
+
+        const vel = Math.min(1, strength / c.FULL_IMPACT);
+        const buf = vel < 0.5 ? voices.lowSoft : voices.lowHard;
+        play(buf, 1, c.FLOOR_GAIN * (0.3 + 0.7 * vel), now, true);
+    }
+
     /** The cycle closed: a basket. */
     function gong() {
         if (!enabled() || !ready || !ctx) return;
@@ -285,6 +358,8 @@ var Audio = (function() {
         init: init,
         resume: resume,
         peg: peg,
+        wall: wall,
+        floor: floor,
         gong: gong,
         isReady: function() { return ready; },
         // For a future mute control; the config flag is the master switch.

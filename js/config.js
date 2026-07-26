@@ -252,9 +252,31 @@ var CONFIG = {
         GONG_DECAY_S: 2.6,
         GONG_GAIN: 0.85,
 
+        // The world's edges: an octave below the pegs, softly struck, and
+        // much quieter. The walls carry the ladder VERTICALLY (low at the
+        // floor, rising as the ball climbs), so between them and the pegs
+        // the whole lattice is playable. The floor does not: it is the
+        // ground, one pitch, and since it fires more than anything else
+        // in the game it is the quietest thing here.
+        LOW_HZ: 132,
+        LOW_DECAY_S: 1.2,    // shorter than the pegs: thuds must not pile up
+        WALL_GAIN: 0.42,
+        FLOOR_GAIN: 0.30,
+        WALL_RUNGS: 5,       // the board's height spread across this many tones,
+                             // all within one octave so the walls stay under
+                             // the pegs' lowest note (132-230Hz vs 264Hz)
+
         // Contact speed in CELLS per step, so feel is screen-independent.
         MIN_IMPACT: 0.035,   // below this a graze stays silent
         FULL_IMPACT: 0.55,   // and at this it strikes at full velocity
+
+        // The edges need higher floors than the pegs: a ball rolling on
+        // the ground technically re-contacts every step, and a settling
+        // bounce trails off into dozens of tiny taps. Only real arrivals
+        // should speak.
+        MIN_IMPACT_LOW: 0.06,
+        MIN_IMPACT_FLOOR: 0.10,
+        MIN_INTERVAL_LOW_MS: 55,
 
         // A rattle is several contacts inside a few frames. Bronze
         // partials overlapping is what a gamelan IS; stacked ATTACKS are
