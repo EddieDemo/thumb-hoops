@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, font: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -30,8 +30,8 @@ function Renderer(game) {
             dbg('Renderer: webfont available - text caches invalidated.');
         };
         Promise.all([
-            document.fonts.load("700 16px 'IBM Plex Mono'"),
-            document.fonts.load("600 16px 'IBM Plex Mono'")
+            document.fonts.load("700 16px " + Renderer.activeFontFamily()),
+            document.fonts.load("600 16px " + Renderer.activeFontFamily())
         ]).then(invalidate).catch(() => { /* offline: fallback face stands */ });
         if (document.fonts.ready) document.fonts.ready.then(invalidate);
     }
@@ -44,9 +44,43 @@ function Renderer(game) {
  * crispness; drawn back at logical size.
  * @returns {{canvas: HTMLCanvasElement, w: number, h: number}}
  */
+/**
+ * FONT TRIAL: which candidate is active, and how to step through them.
+ * Static (not per-instance) because the text caches and the font-loading
+ * warm-up both need it before any Renderer method runs.
+ */
+Renderer.fontIndex = null;
+Renderer.activeFont = function() {
+    const list = CONFIG.RENDER.FONTS;
+    if (!list || !list.length) return { label: 'PLEX', family: "'IBM Plex Mono'" };
+    if (Renderer.fontIndex === null) {
+        const stored = Persistence.load('fontIndex', 0);
+        Renderer.fontIndex = (typeof stored === 'number' && stored >= 0 && stored < list.length) ? stored : 0;
+    }
+    return list[Renderer.fontIndex];
+};
+Renderer.activeFontFamily = function() { return Renderer.activeFont().family; };
+Renderer.cycleFont = function() {
+    const list = CONFIG.RENDER.FONTS;
+    if (!list || !list.length) return;
+    Renderer.activeFont(); // Ensure loaded
+    Renderer.fontIndex = (Renderer.fontIndex + 1) % list.length;
+    Persistence.save('fontIndex', Renderer.fontIndex);
+    // Pull the new face in, then let the caches rebuild on their own keys.
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.load) {
+        const fam = Renderer.activeFontFamily();
+        document.fonts.load("700 16px " + fam);
+        document.fonts.load("600 16px " + fam);
+        document.fonts.load("400 16px " + fam);
+    }
+    dbg('Renderer: font -> ' + Renderer.activeFont().label);
+};
+
 Renderer.prototype.getCachedText = function(cacheName, text, weight, px, color) {
     const cache = this.textCaches[cacheName];
-    const key = text + '|' + color + '|' + px + '|' + weight;
+    // The family is part of the key: switching fonts must rebuild every
+    // cached glyph, or the old face would persist until the text changed.
+    const key = text + '|' + color + '|' + px + '|' + weight + '|' + Renderer.activeFontFamily();
     if (cache.key === key && cache.canvas) return cache;
 
     const dpr = window.devicePixelRatio || 1;
@@ -54,7 +88,7 @@ Renderer.prototype.getCachedText = function(cacheName, text, weight, px, color) 
     const canvas = cache.canvas;
     const ctx = canvas.getContext('2d');
 
-    const font = weight + " " + px + "px 'IBM Plex Mono'";
+    const font = weight + " " + px + "px " + Renderer.activeFontFamily();
     ctx.font = font; // Set before measuring
     const metrics = ctx.measureText(text);
     const w = Math.ceil(metrics.width) + 8; // Small pad against clipping
@@ -116,6 +150,7 @@ Renderer.prototype.drawFrame = function() {
     this.drawScore(game);
     this.drawBestStreak(game);
     this.drawSchemeToggle(game); // Testing affordance (config-gated)
+    this.drawFontCycler(game);   // Font trial label, top-left (temporary)
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);   // Deploy verification, bottom-left cell
 
@@ -440,14 +475,19 @@ Renderer.prototype.drawVersionTag = function(game) {
  * The light/dark mode toggle: a single glyph in the BEST register,
  * top-right - the environment layer's typography as UI, mirroring the
  * scheme label top-left. Emulates the portfolio site's toggle: the glyph
- * shows the CURRENT mode (moon while dark, star while light), tap flips
- * it (see InputHandler), choice persists. Colour is theme-SOLVED like
- * every element, so the little moon blooms and drains with the world.
+ * shows what tapping will GIVE you, not what you already have: a moon
+ * while the court is light, a sun while it is dark. The current state is
+ * already the entire screen - spending one of six top-row cells to repeat
+ * it says nothing, whereas naming the destination says something. Tap
+ * flips it (see InputHandler); the choice persists. Colour is theme-SOLVED
+ * like every element, so the glyph blooms and drains with the world.
  * Glyph note: these characters likely aren't in IBM Plex Mono; canvas
  * falls back to a system face for them - identical behaviour to the site.
  */
 Renderer.prototype.drawThemeToggle = function(game) {
-    const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u23FE' : '\u2739';
+    // Destination, not state: dark court -> sun (tap for light),
+    // light court -> moon (tap for dark).
+    const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u2739' : '\u23FE';
     const cached = this.getCachedText('mode', glyph, '600',
         game.cellRes * 0.5, game.themeColors.BEST);
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
@@ -621,6 +661,19 @@ Renderer.prototype.drawBestStreak = function(game) {
     const centerX = (game.COLUMNS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, game.viewTopY + game.cellRes * 0.9 - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * FONT TRIAL: the active candidate's name, in that candidate's own face,
+ * where the scheme toggle used to live. Tapping it steps to the next.
+ */
+Renderer.prototype.drawFontCycler = function(game) {
+    if (!CONFIG.RENDER.SHOW_FONT_CYCLER) return;
+    const cached = this.getCachedText('font', Renderer.activeFont().label, '600',
+        game.cellRes * 0.30, game.themeColors.BEST);
+    const cx = 0.9 * game.cellRes;
+    const cy = game.viewTopY + 0.5 * game.cellRes;
+    this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
 };
 
 /**

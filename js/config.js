@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v53',
+    VERSION: 'v54',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -414,7 +414,31 @@ var CONFIG = {
         // measured in, made legible so players can calibrate aim and power
         // against it. Whisper-subtle by design (CELL2 contrast ~1.06:1
         // light / 1.34:1 dark, solved live against the current colour).
-        DRAW_GRID: true, // <<< ADD THIS FLAG HERE (set true or false)
+        // The checkerboard. OFF gives a plain field in the theme's own
+        // background colour - the court and the surround beyond it both
+        // fall back together, so the world stays seamless either way.
+        // (With it off the level numeral's transparency has nothing to
+        // show through, so it simply reads as its solved colour.)
+        DRAW_GRID: false,
+
+        // --- FONT TRIAL (temporary) ---
+        // Candidates for the display face, cyclable on device: tap the
+        // top-left corner to step through them (persisted, so a reload
+        // keeps your place). The name is drawn where the scheme toggle
+        // used to live. Set SHOW_FONT_CYCLER false to retire the trial;
+        // the winner then gets self-hosted in the craft pass and this list
+        // collapses to one entry.
+        SHOW_FONT_CYCLER: true,
+        FONTS: [
+            { label: 'PLEX',    family: "'IBM Plex Mono'" },
+            { label: 'MARTIAN', family: "'Martian Mono'" },
+            { label: 'GEIST',   family: "'Geist Mono'" },
+            { label: 'DM',      family: "'DM Mono'" },
+            { label: 'JETBR',   family: "'JetBrains Mono'" },
+            { label: 'SPACE',   family: "'Space Mono'" },
+            { label: 'IOSEVKA', family: "'Iosevka'" },
+            { label: 'SYSTEM',  family: 'ui-monospace, monospace' }
+        ],
         // Blend the ball's rendered position between physics steps so motion
         // is smooth on displays faster than STEP_HZ (90/120/144Hz phones).
         // Rendering runs a fraction of one step behind the simulation -
