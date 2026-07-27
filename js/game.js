@@ -979,6 +979,11 @@ Game.prototype.getPredictionSteps = function() {
 Game.prototype.onBallImpact = function(impacts) {
     // Normalise to cell units so feedback strength is screen-size
     // independent - the same shot feels the same on any phone.
+    // FEEDBACK MUST NEVER BREAK THE SIMULATION. This runs inside the
+    // physics step, so anything that throws here unwinds the rest of the
+    // frame's stepping with it. Haptics and audio are both allowed to
+    // fail; the ball is not allowed to stop moving because of them.
+    try {
     const strength = Math.max(impacts.wallImpact, impacts.pegImpact) / this.cellRes;
     Haptics.impact(strength);
 
@@ -993,6 +998,9 @@ Game.prototype.onBallImpact = function(impacts) {
     }
     if (impacts.floorImpact > 0) {
         Audio.floor(impacts.floorImpact / this.cellRes, this.cellRes);
+    }
+    } catch (e) {
+        console.warn('Feedback failed (continuing):', e && e.message);
     }
 };
 

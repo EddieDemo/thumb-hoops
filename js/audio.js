@@ -50,7 +50,11 @@ var Audio = (function() {
     let failed = false;         // this device can't, and that's fine
     let voices = null;          // { pegSoft, pegHard, gong }
     let lastStrikeAt = -Infinity;   // pegs
-    let lastLowAt = -Infinity;      // walls and floor, limited separately
+    // Walls and floor share a voice but not a clock: a bank off the wall
+    // and the landing that follows it are different events, and one
+    // limiter would let the first silence the second.
+    let lastWallAt = -Infinity;
+    let lastFloorAt = -Infinity;
     let live = [];              // sources still ringing, for the polyphony cap
 
     function cfg() { return CONFIG.AUDIO; }
@@ -250,6 +254,14 @@ var Audio = (function() {
      *        closing and must never be cut short by the rattle that follows.
      */
     function play(buffer, rate, gain, now, stealable) {
+        // Anything non-finite reaching an AudioParam throws, and that
+        // exception would unwind through the physics step that produced
+        // the impact. Refuse quietly instead: a missing sound is a
+        // blemish, a broken simulation frame is a bug.
+        if (!buffer || !isFinite(rate) || !isFinite(gain) || !isFinite(now)) {
+            dbg('Audio: refusing a non-finite strike (rate ' + rate + ', gain ' + gain + ').');
+            return;
+        }
         const src = ctx.createBufferSource();
         src.buffer = buffer;
         src.playbackRate.value = rate;
@@ -300,13 +312,16 @@ var Audio = (function() {
     function wall(y, strength, cellRes, rows) {
         if (!enabled() || !ready || !ctx) return;
         const c = cfg();
+        // A stale physics.js reports no wallY, and a stale config has no
+        // WALL_RUNGS; either turns the pitch into NaN. Guard the door.
+        if (!isFinite(y) || !isFinite(rows) || rows < 2) return;
         if (strength < c.MIN_IMPACT_LOW) return;
 
         const now = ctx.currentTime;
         reap(now);
-        if (now - lastLowAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
+        if (now - lastWallAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
         while (live.length >= c.MAX_VOICES) steal(now);
-        lastLowAt = now;
+        lastWallAt = now;
 
         // Screen y grows downward; pitch rises as the ball climbs. The
         // board's whole height is spread across ONE octave of rungs rather
@@ -337,9 +352,9 @@ var Audio = (function() {
 
         const now = ctx.currentTime;
         reap(now);
-        if (now - lastLowAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
+        if (now - lastFloorAt < c.MIN_INTERVAL_LOW_MS / 1000) return;
         while (live.length >= c.MAX_VOICES) steal(now);
-        lastLowAt = now;
+        lastFloorAt = now;
 
         const vel = Math.min(1, strength / c.FULL_IMPACT);
         const buf = vel < 0.5 ? voices.lowSoft : voices.lowHard;
@@ -354,13 +369,29 @@ var Audio = (function() {
         play(voices.gong, 1, cfg().GONG_GAIN, now, false);
     }
 
+    /**
+     * Every public entry point is sealed: the game calls these from
+     * inside the physics step, so an exception here would abort the rest
+     * of that frame's simulation. Sound is allowed to fail. The world is
+     * not allowed to notice.
+     */
+    function sealed(fn, label) {
+        return function() {
+            try { return fn.apply(null, arguments); }
+            catch (e) {
+                if (!failed) dbg('Audio: ' + label + ' failed (' + e.message + ') - continuing silent.');
+                return undefined;
+            }
+        };
+    }
+
     return {
-        init: init,
-        resume: resume,
-        peg: peg,
-        wall: wall,
-        floor: floor,
-        gong: gong,
+        init: sealed(init, 'init'),
+        resume: sealed(resume, 'resume'),
+        peg: sealed(peg, 'peg'),
+        wall: sealed(wall, 'wall'),
+        floor: sealed(floor, 'floor'),
+        gong: sealed(gong, 'gong'),
         isReady: function() { return ready; },
         // For a future mute control; the config flag is the master switch.
         setEnabled: function(on) { CONFIG.AUDIO.ENABLED = !!on; if (on) init(); }
