@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v56',
+    VERSION: 'v57',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -248,9 +248,27 @@ var CONFIG = {
         PEG_HZ: 264,         // the lowest peg (lattice intersection 0)
         PEG_DECAY_S: 1.6,    // shorter than a real bonang: the court must clear
         PEG_GAIN: 0.9,
-        GONG_HZ: 66,         // two octaves and a bit below - the cycle closing
+        // THE BASKET is a pluck at the hoop - a string, so the game's most
+        // important event is the one thing that doesn't sound like struck
+        // metal. It climbs: each basket takes the next rung, wrapping an
+        // octave every five, so a run is audibly a rising line.
+        STRING_HZ: 330,
+        STRING_DECAY_S: 1.4,
+        STRING_GAIN: 0.8,
+        STRING_MAX_OCT: 2,   // beyond this the ladder cycles in the top octave
+                             // rather than climbing into a shriek
+
+        // THE GONG closes the gongan - and a run's cycle ends when it is
+        // LOST, not when it is extended. It sounds on the miss, as the ball
+        // settles, just behind the floor's own thud.
+        GONG_HZ: 66,
         GONG_DECAY_S: 2.6,
         GONG_GAIN: 0.85,
+        GONG_LAG_MS: 16,        // two players are never in perfect unison...
+        GONG_LAG_JITTER_MS: 12, // ...and a FIXED offset reads as an echo,
+                                // where a varying one reads as two people
+        GONG_MIN_STREAK: 1,     // a cycle that never started needs no closing:
+                                // grinding rung 0 gets the thud, not the gong
 
         // The world's edges: an octave below the pegs, softly struck, and
         // much quieter. The walls carry the ladder VERTICALLY (low at the

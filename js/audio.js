@@ -97,6 +97,24 @@ var Audio = (function() {
             ombak: { beatHz: 0, depth: 0 },
             attack: 0.002
         },
+        string: {   // celempung: paired string courses. The ONLY voice that
+                    // keeps its ombak - its shimmer comes from two courses
+                    // on one instrument, not from two instruments forged
+                    // apart, so it arrives with a sparkle nothing else in
+                    // the court has. A pluck, too: sharp on, quickly gone,
+                    // so it never smears into the round that follows.
+            partials: [
+                { r: 1.0, g: 1.00, d: 1.00 },
+                { r: 2.0, g: 0.50, d: 0.50 },
+                { r: 3.0, g: 0.30, d: 0.35 },
+                { r: 4.0, g: 0.18, d: 0.25 },
+                { r: 5.0, g: 0.10, d: 0.18 },
+                { r: 7.0, g: 0.05, d: 0.10 }
+            ],
+            strike: { fMul: 8, q: 0.6, level: 0.28, decay: 0.006 },
+            ombak: { beatHz: 1.8, depth: 0.35 },
+            attack: 0.001
+        },
         gong: {
             partials: [
                 { r: 1.000, g: 1.00, d: 1.00 },
@@ -208,10 +226,19 @@ var Audio = (function() {
             renderVoice(VOICES.peg, c.PEG_HZ, c.PEG_DECAY_S, 1.0),
             renderVoice(VOICES.gong, c.GONG_HZ, c.GONG_DECAY_S, 0.9),
             renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 0.35),
-            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 1.0)
+            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 1.0),
+            // One string per octave. Repitching a single buffer across the
+            // whole ladder would leave the top of a long run almost
+            // inaudible - a 7x rate turns 1.4s of ring into 0.2s. Casting
+            // per octave keeps every rung a real note, and each is a
+            // little shorter than the one below, as higher strings are.
+            renderVoice(VOICES.string, c.STRING_HZ, c.STRING_DECAY_S, 1.0),
+            renderVoice(VOICES.string, c.STRING_HZ * 2, c.STRING_DECAY_S * 0.8, 1.0),
+            renderVoice(VOICES.string, c.STRING_HZ * 4, c.STRING_DECAY_S * 0.64, 1.0)
         ]).then(bufs => {
             voices = { pegSoft: bufs[0], pegHard: bufs[1], gong: bufs[2],
-                       lowSoft: bufs[3], lowHard: bufs[4] };
+                       lowSoft: bufs[3], lowHard: bufs[4],
+                       strings: [bufs[5], bufs[6], bufs[7]] };
             ready = true;
             dbg('Audio: bronze cast.');
         }).catch(() => {
@@ -361,11 +388,40 @@ var Audio = (function() {
         play(buf, 1, c.FLOOR_GAIN * (0.3 + 0.7 * vel), now, true);
     }
 
-    /** The cycle closed: a basket. */
-    function gong() {
+    /**
+     * A BASKET, sounded at the hoop where it is decided - and the run
+     * climbs. Streak 0 plucks the root, and each basket takes the next
+     * rung of the ladder, wrapping into the octave above every five. So a
+     * long run is audibly a rising line, and the gong that ends it drops
+     * back to the bottom: the whole arc is hearable.
+     *
+     * @param {number} streak - baskets BEFORE this one, so the first is home.
+     */
+    function score(streak) {
         if (!enabled() || !ready || !ctx) return;
+        const c = cfg();
+        const k = Math.max(0, streak | 0);
+        const oct = Math.min(Math.floor(k / 5), c.STRING_MAX_OCT);
+        const degree = k % 5;
         const now = ctx.currentTime;
         reap(now);
+        play(voices.strings[oct], Math.pow(2, (degree * c.STEP_CENTS) / 1200),
+             c.STRING_GAIN, now, false);
+    }
+
+    /**
+     * The GONG: the gongan closing. In gamelan the gong marks the end of
+     * a cycle - and a run's cycle ends when it is LOST, not when it is
+     * extended. So this sounds on the miss, as the ball settles.
+     *
+     * @param {number} delayS - it lands just behind the floor's thud. Two
+     *        players never strike in perfect unison, and letting the thud's
+     *        transient clear first stops it masking the gong's attack.
+     */
+    function gong(delayS) {
+        if (!enabled() || !ready || !ctx) return;
+        const now = ctx.currentTime + (isFinite(delayS) ? Math.max(0, delayS) : 0);
+        reap(ctx.currentTime);
         play(voices.gong, 1, cfg().GONG_GAIN, now, false);
     }
 
@@ -389,6 +445,7 @@ var Audio = (function() {
         init: sealed(init, 'init'),
         resume: sealed(resume, 'resume'),
         peg: sealed(peg, 'peg'),
+        score: sealed(score, 'score'),
         wall: sealed(wall, 'wall'),
         floor: sealed(floor, 'floor'),
         gong: sealed(gong, 'gong'),

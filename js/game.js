@@ -703,6 +703,17 @@ Game.prototype.startResetTimer = function() {
  */
 Game.prototype.initiateLevelResetLogic = function() {
     dbg("Game: Running level reset logic...");
+
+    // THE GONG: the cycle closing. In flick this runs one frame after the
+    // ball's floor contact, so the gong already trails the thud naturally;
+    // the extra jittered lag makes them two players rather than one event
+    // heard twice. A run that never started (a rung-0 miss) gets no gong -
+    // there is no cycle to close, and grinding the first rung would
+    // otherwise toll all evening.
+    if (!this.hasScored && this.score >= CONFIG.AUDIO.GONG_MIN_STREAK) {
+        const A = CONFIG.AUDIO;
+        Audio.gong((A.GONG_LAG_MS + Math.random() * A.GONG_LAG_JITTER_MS) / 1000);
+    }
     // A new round: whatever the ball is still doing is leftover physics,
     // not an attempt, until the player picks it up again.
     this.ballReleasedThisRound = false;
@@ -1057,7 +1068,9 @@ Game.prototype.startFateTransit = function(mode) {
  */
 Game.prototype.registerScore = function() {
     Capture.finish(true);
-    Audio.gong();   // the gongan closes
+    // Sounded at the hoop, where it is decided - and pitched by the run so
+    // far, so the streak climbs the ladder as it grows.
+    Audio.score(this.score);
     this.score++;
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);
