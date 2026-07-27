@@ -243,17 +243,6 @@ InputHandler.prototype.handlePointerDown = function(event) {
         return;
     }
 
-    // FONT TRIAL (temporary): a tap in the top-LEFT corner steps through
-    // the candidate faces. Same visible-top anchoring as every other
-    // screen-fixed region.
-    if (CONFIG.RENDER.SHOW_FONT_CYCLER &&
-        pos.x < this.game.cellRes * 1.8 &&
-        pos.y > this.game.viewTopY &&
-        pos.y < this.game.viewTopY + this.game.cellRes * 1.4) {
-        Renderer.cycleFont();
-        dbg('InputHandler: Font cycled to ' + Renderer.activeFont().label + '.');
-        return;
-    }
 
     // Theme toggle (product feature): a tap in the top-right glyph region
     // flips light/dark - same action as the T key, persisted.

@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v59',
+    VERSION: 'v60',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -519,24 +519,13 @@ var CONFIG = {
         // show through, so it simply reads as its solved colour.)
         DRAW_GRID: false,
 
-        // --- FONT TRIAL (temporary) ---
-        // Candidates for the display face, cyclable on device: tap the
-        // top-left corner to step through them (persisted, so a reload
-        // keeps your place). The name is drawn where the scheme toggle
-        // used to live. Set SHOW_FONT_CYCLER false to retire the trial;
-        // the winner then gets self-hosted in the craft pass and this list
-        // collapses to one entry.
-        SHOW_FONT_CYCLER: true,
-        FONTS: [
-            { label: 'PLEX',    family: "'IBM Plex Mono'" },
-            { label: 'MARTIAN', family: "'Martian Mono'" },
-            { label: 'GEIST',   family: "'Geist Mono'" },
-            { label: 'DM',      family: "'DM Mono'" },
-            { label: 'JETBR',   family: "'JetBrains Mono'" },
-            { label: 'SPACE',   family: "'Space Mono'" },
-            { label: 'IOSEVKA', family: "'Iosevka'" },
-            { label: 'SYSTEM',  family: 'ui-monospace, monospace' }
-        ],
+        // The face. Geist Mono: clean, unambiguous digits - which is what
+        // this game actually renders (the level numeral is four cells tall
+        // and almost everything else is a number). Chosen on glass after a
+        // trial of eight candidates; the cycler that ran that trial is
+        // retired. The fallback is the device's own monospace, so a failed
+        // font load degrades to something well drawn rather than to Times.
+        FONT_FAMILY: "'Geist Mono', ui-monospace, monospace",
         // Blend the ball's rendered position between physics steps so motion
         // is smooth on displays faster than STEP_HZ (90/120/144Hz phones).
         // Rendering runs a fraction of one step behind the simulation -
