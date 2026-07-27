@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v58',
+    VERSION: 'v59',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -33,18 +33,13 @@ var CONFIG = {
         GRAVITY_SCALE: 0.02,
 
         // Controls how sensitive the aiming is to input movements (e.g., mouse/touch drag).
-        // Launch speed = (dragDistance / cellRes) * (cellRes * AIMING_SENSITIVITY_SCALE)
-        //             = dragDistance * AIMING_SENSITIVITY_SCALE  (in logical px per physics step)
         // NOTE: Retuned from 0.035 -> 0.14 (x4) when input moved to logical coordinates,
         // preserving the exact previous game feel. Tune freely from here.
-        AIMING_SENSITIVITY_SCALE: 0.14,
 
         // Maximum drag distance that registers, as a fraction of the board's logical height.
-        // Calculation: max_drag_distance = (ROWS * cellRes) * MAX_DRAG_HEIGHT_MULTIPLIER
         // NOTE: Retuned from 2 -> 0.5 when input moved to logical coordinates. The old value
         // of 2 was measured in scaled coordinates, making the *effective* max drag half the
         // board height - 0.5 now states that honestly. Tune freely from here.
-        MAX_DRAG_HEIGHT_MULTIPLIER: 0.5,
 
         // Defines the ball's radius relative to the cell size.
         // Calculation: ball_radius = game.cellRes * RADIUS_SCALE
@@ -85,25 +80,6 @@ var CONFIG = {
     },
 
     INPUT: {
-        // 'drag'  = aim by dragging: direction/power from start->current
-        //           vector, held and adjustable, release above the line
-        //           commits (the shipping scheme).
-        // 'flick' = pick the ball up and THROW it: the ball follows the
-        //           thumb; release velocity (sampled from the gesture's
-        //           last moments) becomes launch velocity; a slow release
-        //           sets the ball down (abort). EXPERIMENT - judge at
-        //           streak 6+, not first-minute delight.
-        // The shipped scheme. Drag remains fully implemented behind this
-        // switch (nothing was removed) - flip back to 'drag' to play it.
-        SCHEME: 'flick',
-
-        // Testing affordance: a small label top-left showing the active
-        // scheme; tapping it restarts the run and switches scheme
-        // (persisted). OFF for public builds and tester links - and while
-        // it is off, SCHEME is authoritative: any previously persisted
-        // choice is ignored, so nobody can be stranded in a scheme with no
-        // visible way back.
-        SHOW_SCHEME_TOGGLE: false,
 
         FLICK: {
             SAMPLE_WINDOW_MS: 80,   // Gesture window sampled for velocity
@@ -359,13 +335,11 @@ var CONFIG = {
         // Placement ceiling derives from this (one-row buffer above the
         // line) - changing it re-triggers the anchor covenant.
         SHOOT_AREA_ROWS: 4,       // Number of rows from bottom for shooting area
-        PREDICTION_FRAMES: 100,   // Full path length (steps) - used while teaching and in debug
 
         // --- First-run teaching (scaffold and fade) ---
         // Prediction path length by shot number: shot 1 shows the complete
         // answer, shot 2 the launch arc, shot 3 just direction+power intent,
         // shot 4 onward nothing. Teaching through the systems, zero text.
-        TEACHING_PATH_STEPS: [100, 36, 14],
 
         // 'lifetime': the wean runs over the first shots EVER taken on this
         //             device, then the path is gone for good (pure tutorial).
@@ -373,7 +347,6 @@ var CONFIG = {
         //             ritual after each streak reset.
         // The shot counter persists either way, so reloading mid-streak can
         // never conjure a free assisted shot.
-        TEACHING_SCOPE: 'run',
         // --- Solution-density solver (see js/solver.js) ---
         // Placement difficulty is MEASURED: candidate hoops are graded by
         // the fraction of the sampled shot space that scores, through the
@@ -381,10 +354,6 @@ var CONFIG = {
         // per-round cost; densities are cached per placement per session.
         SOLVER: {
             ENABLED: true,
-            START_POSITIONS: 5,  // Launch x positions across the zone
-            ANGLES: 16,          // Launch directions (15..165 degrees)
-            POWERS: 8,           // Launch speeds up to max drag power
-            MAX_STEPS: 140,      // Per-trajectory simulation cap
 
             // --- The streak-difficulty arc ---
             // Each round targets a DENSITY BAND from the measured table:
@@ -517,10 +486,8 @@ var CONFIG = {
 
         GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
         BOUNDARY_LINE_WIDTH: 2,
-        SHOOT_LINE_WIDTH: 1,
         // Shoot line width while an aim's release would ABORT (finger still
         // below the line): firmer, meaning "let go here and nothing fires".
-        SHOOT_LINE_HELD_WIDTH: 2.5,
 
         // The shoot boundary is drawn as DOTS at the grid intersections on
         // its row, not as a rule across the board: the lattice already
@@ -531,7 +498,6 @@ var CONFIG = {
         // expressed as weight rather than thickness. Pegs are 0.10 cells,
         // so these stay clearly lighter than matter.
         SHOOT_DOT_RADIUS: 0.035,
-        SHOOT_DOT_RADIUS_HELD: 0.055,
         // Spacing and inset in cells: dots run from INSET to COLUMNS-INSET
         // in STEP increments. At 0.5/1 that marks every half-cell across
         // the middle four columns and leaves the wall-adjacent cells bare,
@@ -579,7 +545,6 @@ var CONFIG = {
 
         // DEBUG OVERRIDE: force the full prediction path on every shot,
         // ignoring the teaching wean. For development/tuning only.
-        PREDICTION_PATH_ALWAYS: false,
         DRAW_TRAIL: true,           // Toggle for the ball's fading trail
 
         // --- Daily record separator: summit SEP2 cost, e.g. "14-9" ---
@@ -590,7 +555,7 @@ var CONFIG = {
         // A short readback of direction and power from the ball's edge
         // while aiming: NON-predictive (no physics - the teaching path is
         // the only oracle), just "the ball feels your grip". Hidden while
-        // the release would abort (third subscriber to wouldReleaseAbort)
+        // the release would abort
         // and during teaching shots (the full path already speaks).
         // The indicator speaks the game's existing motion language: the
         // flight trail (shrinking, fading circles) projected FORWARD. The
@@ -598,21 +563,9 @@ var CONFIG = {
         // wears its future the same way - solid at the ball, dissolving
         // toward where it's going. Direction needs no arrow: things
         // dissolve AWAY from their source. Power stretches the dissolve.
-        AIM: {
-            MAX_LENGTH_CELLS: 2.2,    // Dissolve span at full power (cells)
-            DOTS: 8,                  // Circles along the dissolve
-            BASE_RADIUS_CELLS: 0.10,  // First circle's radius (at the ball)
-            TAPER: 0.75,              // Radius lost across the span (0..1)
-            EDGE_GAP_CELLS: 0.10,     // Gap between ball edge and first circle
-            ALPHA: 0.6                // Starting opacity; fades to 0 at the tip
-        },
 
         // --- Prediction Path Style Options ---
-        PREDICTION_PATH_STYLE: 'dots', // Options: 'dots' or 'line'
-        PREDICTION_ALPHA: 0.3,         // Base opacity of the path (fade multiplies this)
-        PREDICTION_PATH_LINE_WIDTH: 1, // Line width used for both styles
         // Scale relative to the ball's radius, used only for 'dots' style
-        PREDICTION_PATH_DOT_RADIUS_SCALE: 1,
         // --- End Prediction Path Options ---
 
     },
@@ -686,8 +639,6 @@ var CONFIG = {
         // per-mode contrast solving). The original hand-tuned values live on
         // as the calibration sources documented in RAMP.CONTRAST above.
 
-        // NOTE: PREDICTION_LINE is no longer a fixed colour - it derives
-        // from the theme's ink (see palette.js), drawn at PREDICTION_ALPHA.
     }
 };
 

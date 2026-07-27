@@ -206,11 +206,6 @@ InputHandler.prototype.handleKeyDown = function(event) {
         case 'C':
             if (Capture.enabled()) { Capture.reset(); }
             break;
-        case 'r': // R - DEBUG: rewind the teaching wean to shot 1
-        case 'R':
-            dbg('InputHandler: Requesting teaching reset...');
-            this.game.resetTeaching();
-            break;
     }
 };
 
@@ -234,16 +229,6 @@ InputHandler.prototype.handlePointerDown = function(event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
 
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
-
-    // Scheme toggle (testing affordance): a tap in the top-left label
-    // region restarts and switches input scheme. Checked before any aim
-    // logic; the regions can't overlap (toggle top, shoot zone bottom).
-    if (CONFIG.INPUT.SHOW_SCHEME_TOGGLE &&
-        pos.x < this.game.cellRes * 1.6 && pos.y < this.game.cellRes * 1.4) {
-        dbg('InputHandler: Scheme toggle tapped.');
-        this.game.toggleInputScheme();
-        return;
-    }
 
     // INSTRUMENT: tap the REC counter to export the session. iOS requires
     // a user gesture for the share sheet, which is exactly what this is.
@@ -305,14 +290,12 @@ InputHandler.prototype.handlePointerDown = function(event) {
         this.game.startAiming(pos.x, pos.y);
         this.game.transitionTo(GameStates.AIMING);
 
-        if (this.game.inputScheme === 'flick') {
-            // Pick the ball up: it follows the thumb from here; the
-            // gesture's final moments will become the throw.
-            this.flickSamples = [];
-            this.captureSamples = [];
-            this.recordFlickSample(pos.x, pos.y, this.eventTime(event));
-            this.game.moveCarriedBall(pos.x, pos.y);
-        }
+        // The ball follows the thumb from here; the gesture's final
+        // moments will become the throw.
+        this.flickSamples = [];
+        this.captureSamples = [];
+        this.recordFlickSample(pos.x, pos.y, this.eventTime(event));
+        this.game.moveCarriedBall(pos.x, pos.y);
     } else {
         dbg(`InputHandler: Aim start ignored. State: ${this.game.currentState}, Y: ${pos.y.toFixed(1)}`);
     }
@@ -349,7 +332,6 @@ InputHandler.prototype.sampleFromEvent = function(event, pos) {
  */
 InputHandler.prototype.handlePointerRawUpdate = function(event) {
     if (event.pointerId !== this.activePointerId) return;
-    if (this.game.inputScheme !== 'flick') return;
     if (this.game.currentState !== GameStates.AIMING) return;
     this._rawUpdateActive = true; // Proven live: pointermove stops sampling
     this.sampleFromEvent(event, null);
@@ -364,7 +346,7 @@ InputHandler.prototype.handlePointerMove = function(event) {
     if (this.game.currentState !== GameStates.AIMING) return;
 
     const pos = this.getCanvasPos(event); // Logical canvas coordinates
-    if (this.game.inputScheme === 'flick') {
+    {
         // Feed the estimator EVERY sample the hardware produced: browsers
         // batch fast touch input and deliver one event per frame with the
         // rest coalesced inside it - recovering them can double or triple
@@ -404,8 +386,6 @@ InputHandler.prototype.handlePointerMove = function(event) {
         }
 
         this.game.moveCarriedBall(pos.x, pos.y);
-    } else {
-        this.game.updateAim(pos.x, pos.y);
     }
 };
 
@@ -421,7 +401,7 @@ InputHandler.prototype.handlePointerUp = function(event) {
     if (this.game.currentState === GameStates.AIMING) {
         const pos = this.getCanvasPos(event);
 
-        if (this.game.inputScheme === 'flick') {
+        {
             // Release: the ball leaves the hand with the gesture's
             // sampled velocity - whatever it is, in any direction,
             // including nothing. There is NO throw/drop distinction: a
@@ -434,21 +414,6 @@ InputHandler.prototype.handlePointerUp = function(event) {
             dbg(`InputHandler: Ball released v=(${v.x.toFixed(1)}, ${v.y.toFixed(1)}) px/step.`);
             Capture.recordRelease(this.game, this.captureSamples, v, this.game.currentBall);
             this.game.releaseCarriedBall(v.x, v.y);
-            return;
-        }
-
-        // DRAG: feed the final position, then let the Game's single
-        // authority decide: release above the shoot line commits; release
-        // still inside the shoot zone is an ABORT - the second-guess
-        // escape hatch. The ball quietly returns to waiting.
-        this.game.updateAim(pos.x, pos.y);
-        if (this.game.wouldReleaseAbort()) {
-            dbg(`InputHandler: Pointer up inside shoot zone - aborting toss.`);
-            this.game.cancelAim();
-        } else {
-            dbg(`InputHandler: Pointer up at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}) - Requesting shot, transitioning to SHOT_TAKEN.`);
-            this.game.shoot();
-            this.game.transitionTo(GameStates.SHOT_TAKEN);
         }
     }
 };

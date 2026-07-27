@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, scheme: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, font: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, font: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -149,7 +149,6 @@ Renderer.prototype.drawFrame = function() {
     // Layer 3: the environment layer - score and BEST sit BEHIND the world
     this.drawScore(game);
     this.drawBestStreak(game);
-    this.drawSchemeToggle(game); // Testing affordance (config-gated)
     this.drawFontCycler(game);   // Font trial label, top-left (temporary)
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);   // Deploy verification, bottom-left cell
@@ -164,176 +163,12 @@ Renderer.prototype.drawFrame = function() {
     this.drawGhostBall(game);         // Teaching ghost (level one only)
     this.drawGameObjects(game.effects); // Detached one-shot effects (echoes)
 
-    // --- Trajectory Path Drawing ---
-    // Path VISIBILITY and LENGTH are the Game's decision (teaching wean /
-    // debug override) - the renderer only asks and draws. Both paths still
-    // come from the same simulation (stepBallState), so whatever is shown
-    // is exact.
-    {
-        let launchState = null;
-        let pathSteps = 0;
-
-        if (game.currentState === GameStates.AIMING && game.currentBall) {
-            pathSteps = game.getPredictionSteps();
-            if (pathSteps > 0) {
-                launchState = {
-                    pixelX: game.currentBall.pixelX,
-                    pixelY: game.currentBall.pixelY,
-                    velocity: game.currentBall.hypotheticalVelocity,
-                    radius: game.currentBall.radius
-                };
-            }
-        } else if ((game.currentState === GameStates.SHOT_TAKEN || game.currentState === GameStates.RESETTING) && game.lastShotPathData) {
-            // Persisted path replays at the length the player aimed with -
-            // never longer (that would reveal bounces teaching had hidden).
-            pathSteps = CONFIG.RENDER.PREDICTION_PATH_ALWAYS
-                ? CONFIG.GAME.PREDICTION_FRAMES
-                : game.lastShotPathData.predictionSteps;
-            if (pathSteps > 0) {
-                const d = game.lastShotPathData;
-                launchState = {
-                    pixelX: d.startX,
-                    pixelY: d.startY,
-                    velocity: { x: d.velocityX, y: d.velocityY },
-                    radius: d.radius
-                };
-            }
-        }
-
-        if (launchState && pathSteps > 0) {
-            const points = game.physicsEngine.simulateTrajectory(launchState, pathSteps);
-            // While the shot is in flight, dots the ball has already reached
-            // are consumed (skipped); while aiming, nothing is consumed yet.
-            const consumed = (game.currentState === GameStates.AIMING) ? 0 : game.shotStepsElapsed;
-            this.drawTrajectory(launchState, points, pathSteps, consumed);
-        }
-    }
-    // --- End Trajectory Path Drawing ---
-
-    // --- Aim indicator (post-wean) ---
-    // Once the teaching path has weaned away, the drag was mute: nothing
-    // on screen answered the thumb. This is the answer - a short trail of
-    // dots from the ball's edge along the launch direction, span scaling
-    // with power. NON-predictive by design: direction and power are facts
-    // the player authored; showing them back is acknowledgment, not
-    // assistance. Hidden while release would abort (the indicator is the
-    // third subscriber to wouldReleaseAbort, after input and the shoot
-    // line). Shown during teaching shots too: the path predicts the
-    // flight, the indicator answers the grip - different jobs, both on.
-    if (game.inputScheme === 'drag' &&
-        game.currentState === GameStates.AIMING && game.currentBall &&
-        !game.wouldReleaseAbort()) {
-        this.drawAimIndicator(game);
-    }
-
     // Draw ball last so it's on top
     this.drawGameObjects(game.balls);
 
 };
 
 
-/**
- * Draws a pre-simulated trajectory with two refinements:
- *  - FADE: opacity falls linearly to 0 across the REQUESTED step count, so
- *    teaching-truncated paths dissolve rather than stopping dead, while
- *    floor-terminated paths keep opacity at the landing (they end before
- *    the fade does).
- *  - CONSUMPTION: the first `skipCount` points are not drawn - during
- *    flight the ball consumes its predicted future dot by dot, since
- *    point[i] IS the ball's position after step i+1.
- * Pure presentation: all simulation happens in PhysicsEngine.
- * @param {{pixelX:number, pixelY:number, radius:number}} launchState - Where the path begins.
- * @param {Array<{x:number, y:number}>} points - One point per simulated step.
- * @param {number} requestedSteps - Steps ASKED for (fade denominator), >= points.length.
- * @param {number} skipCount - Leading points already consumed by the ball's flight.
- */
-Renderer.prototype.drawTrajectory = function(launchState, points, requestedSteps, skipCount) {
-    if (!points || points.length === 0) return;
-    if (skipCount >= points.length) return; // Entire path consumed
-    const c = this.c;
-
-    const pathStyle = CONFIG.RENDER.PREDICTION_PATH_STYLE;
-    const lineWidth = CONFIG.RENDER.PREDICTION_PATH_LINE_WIDTH;
-    const dotRadius = Math.max(1, launchState.radius * CONFIG.RENDER.PREDICTION_PATH_DOT_RADIUS_SCALE);
-    // Path colour is the theme's ink, at a base opacity the fade multiplies.
-    const pathColor = this.game.themeColors.PREDICTION_LINE;
-    const baseAlpha = CONFIG.RENDER.PREDICTION_ALPHA;
-
-    // Linear fade across the requested length. globalAlpha multiplies the
-    // colour's own alpha, so PREDICTION_LINE's base opacity is preserved as
-    // the starting point of the fade.
-    const fadeAt = (i) => Math.max(0, 1 - (i + 1) / requestedSteps);
-
-    c.save();
-    c.strokeStyle = pathColor;
-    c.lineWidth = lineWidth;
-
-    if (pathStyle === 'dots') {
-        // PERF: up to 100 dots used to mean 100 beginPath/stroke calls.
-        // Dots are bucketed by QUANTISED fade (24 levels - a step of
-        // ~0.0125 alpha, below perception) and each bucket strokes as ONE
-        // path with sub-path arcs: worst case 24 draw calls, typical far
-        // fewer. Identical look, order-of-magnitude fewer calls.
-        const LEVELS = 24;
-        const buckets = new Array(LEVELS);
-        for (let i = skipCount; i < points.length; i++) {
-            const fade = fadeAt(i);
-            if (fade <= 0) break;
-            const level = Math.min(LEVELS - 1, Math.round(fade * (LEVELS - 1)));
-            (buckets[level] = buckets[level] || []).push(points[i]);
-        }
-        for (let level = 0; level < LEVELS; level++) {
-            const pts = buckets[level];
-            if (!pts) continue;
-            c.globalAlpha = (level / (LEVELS - 1)) * baseAlpha;
-            c.beginPath();
-            for (const p of pts) {
-                c.moveTo(p.x + dotRadius, p.y);
-                c.arc(p.x, p.y, dotRadius, 0, Math.PI * 2, false);
-            }
-            c.stroke();
-        }
-    } else { // 'line' - per-segment strokes so opacity can vary along the path
-        for (let i = skipCount; i < points.length; i++) {
-            const fade = fadeAt(i);
-            if (fade <= 0) break;
-            const from = (i === 0)
-                ? { x: launchState.pixelX, y: launchState.pixelY }
-                : points[i - 1];
-            c.globalAlpha = fade * baseAlpha;
-            c.beginPath();
-            c.moveTo(from.x, from.y);
-            c.lineTo(points[i].x, points[i].y);
-            c.stroke();
-        }
-    }
-
-    c.restore();
-};
-
-
-/**
- * Testing affordance: the active input scheme's name, top-left, in the
- * BEST register (same face, size, colour role - the environment layer's
- * typography). Tapping it toggles scheme + restarts (see InputHandler).
- * Config-gated; off for any public build.
- */
-Renderer.prototype.drawSchemeToggle = function(game) {
-    if (!CONFIG.INPUT.SHOW_SCHEME_TOGGLE) return;
-    // Glyph shows the CURRENT scheme, mirroring the theme toggle's
-    // semantics: a targeting reticle for drag (spatial aiming), a wave
-    // arrow for flick (the throwing gesture). System-fallback glyphs,
-    // same as the moon/star.
-    const glyph = game.inputScheme === 'flick' ? '\u219D' : '\u2316';
-    const cached = this.getCachedText('scheme', glyph, '600',
-        game.cellRes * 0.5, game.themeColors.BEST);
-    // Centred in the TOP-LEFT-MOST grid cell - the lattice-citizen mirror
-    // of the theme glyph top-right.
-    const centerX = 0.5 * game.cellRes;
-    const centerY = 0.5 * game.cellRes;
-    this.c.drawImage(cached.canvas,
-        centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
-};
 
 /**
  * Back-solves a base colour that, drawn at `wantAlpha` over `bgHex`,
@@ -496,45 +331,6 @@ Renderer.prototype.drawThemeToggle = function(game) {
     const centerY = game.viewTopY + 0.5 * game.cellRes;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
-};
-
-/**
- * The post-wean aim readback: CONFIG.RENDER.AIM.DOTS dots from the ball's
- * edge along the launch direction, span = power fraction of a cell.
- */
-Renderer.prototype.drawAimIndicator = function(game) {
-    const ball = game.currentBall;
-    const v = ball.hypotheticalVelocity;
-    const speed = Math.sqrt(v.x * v.x + v.y * v.y);
-    if (speed < 0.001) return; // No drag yet - nothing to say
-
-    // Power as a fraction of the maximum launch speed (derived from the
-    // same constants the aim itself uses - always in agreement).
-    const maxDrag = (game.ROWS * game.cellRes) * CONFIG.PHYSICS.MAX_DRAG_HEIGHT_MULTIPLIER;
-    const maxSpeed = maxDrag * CONFIG.PHYSICS.AIMING_SENSITIVITY_SCALE;
-    const power = Math.min(1, speed / maxSpeed);
-
-    const A = CONFIG.RENDER.AIM;
-    const ux = v.x / speed, uy = v.y / speed;
-    const startDist = ball.radius + A.EDGE_GAP_CELLS * game.cellRes;
-    const span = power * A.MAX_LENGTH_CELLS * game.cellRes;
-
-    // The dissolve: same visual system as the flight trail, projected
-    // forward. Radius tapers and opacity fades toward the tip - direction
-    // and power in one gesture, no annotation.
-    const c = this.c;
-    c.save();
-    c.fillStyle = game.themeColors.PREDICTION_LINE; // The theme's ink
-    for (let i = 1; i <= A.DOTS; i++) {
-        const t = i / A.DOTS; // 0 at the ball -> 1 at the tip
-        const d = startDist + span * t;
-        const r = Math.max(0.5, A.BASE_RADIUS_CELLS * game.cellRes * (1 - A.TAPER * t));
-        c.globalAlpha = A.ALPHA * (1 - t);
-        c.beginPath();
-        c.arc(ball.pixelX + ux * d, ball.pixelY + uy * d, r, 0, Math.PI * 2, false);
-        c.fill();
-    }
-    c.restore();
 };
 
 // --- Other Renderer Methods ---
@@ -717,9 +513,7 @@ Renderer.prototype.drawShootBoundaryLine = function(game) {
     // territory", settling the moment the drag crosses into commitment.
     // Zero text; the boundary's second job. It used to firm by thickening
     // a rule; now it firms by weight of dot.
-    const armed = game.wouldReleaseAbort();
-    const rad = game.cellRes * (armed ? CONFIG.RENDER.SHOOT_DOT_RADIUS_HELD
-                                      : CONFIG.RENDER.SHOOT_DOT_RADIUS);
+    const rad = game.cellRes * CONFIG.RENDER.SHOOT_DOT_RADIUS;
     const boundaryY = (game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * game.cellRes;
     c.fillStyle = game.themeColors.BOUNDARY;
     // Half-cell spacing across the middle of the board, clear of both

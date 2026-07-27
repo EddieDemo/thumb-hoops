@@ -40,24 +40,17 @@ function Game() {
 
     // Physics properties calculated from CONFIG scales
     this.gravity = 0;
-    this.speed = 0; // Aim sensitivity (calculated) - Now refers to AIMING_SENSITIVITY_SCALE
     this.nRadius = 0; // Node radius (calculated)
     this.radius = 0; // Ball radius (calculated)
 
     // Game State Variables
     this.score = 0;         // Current streak (restored from persistence in start())
     this.bestStreak = Persistence.load('bestStreak', 0); // All-time best
-    this.teachShotsTaken = Persistence.load('teachShots', 0); // Shots counted for the teaching wean
-    this.shotStepsElapsed = 0; // Fixed steps flown in the current shot
     // Fate transit: once the shot's outcome is knowable (downward hoop-line
     // crossing, or apex for balls that never reach the line), the colour
     // transition starts and is driven by the ball's fall until its centre
     // crosses the world's bottom edge. { startY, mode, t, done }
     this.fateTransit = null;
-    // Active input scheme ('drag' | 'flick'). The persisted choice only
-    // applies while the toggle is visible; with the toggle hidden the
-    // configured scheme wins, so a stored 'drag' can't strand a player
-    // (or a tester) in a scheme they have no way to leave.
     // The level shown on the court - see startHoopCycle.
     this.displayLevel = 1;
 
@@ -65,10 +58,6 @@ function Game() {
     // Only then can leaving the zone count as a shot (see
     // checkShotPromotion).
     this.ballReleasedThisRound = false;
-
-    this.inputScheme = CONFIG.INPUT.SHOW_SCHEME_TOGGLE
-        ? Persistence.load('inputScheme', CONFIG.INPUT.SCHEME)
-        : CONFIG.INPUT.SCHEME;
 
     // --- THE COURT ---
     // A court IS a seed: the hoop ladder and the run's hue derive from it
@@ -119,8 +108,6 @@ function Game() {
     this.roundInvalidated = false;
     this.difficulty = 0; // Calculated based on config
     this.difficultyLevels = CONFIG.GAME.DIFFICULTY_LEVELS; // From CONFIG
-    this.aimStartX = 0; // Screen coords where aim started
-    this.aimStartY = 0;
 
     // --- State Machine ---
     this.currentState = GameStates.READY_TO_AIM; // Initial state
@@ -151,7 +138,6 @@ function Game() {
     this.themeColors = null;
 
     // Property to store data for the persistent path after shooting
-    this.lastShotPathData = null; // {startX, startY, velocityX, velocityY, radius}
 
     // Timer ID for reset delay
     this.resetTimerId = null; // Store timer ID to allow cancelling
@@ -226,7 +212,6 @@ Game.prototype.redefineVariables = function() {
 
     // Calculate physics values based on cell size and config scales
     this.gravity = this.cellRes * CONFIG.PHYSICS.GRAVITY_SCALE;
-    this.speed = this.cellRes * CONFIG.PHYSICS.AIMING_SENSITIVITY_SCALE;
     this.radius = this.cellRes * CONFIG.PHYSICS.RADIUS_SCALE;
     this.nRadius = this.cellRes * CONFIG.PHYSICS.NRADIUS_SCALE;
 
@@ -239,7 +224,7 @@ Game.prototype.redefineVariables = function() {
  * Initializes or fully restarts the game.
  */
 Game.prototype.start = function() {
-    if (this.inputScheme === 'flick') {
+    {
         // The intro: an empty world, a ball falling into it. The court
         // rises when the ball first lands (onFloorContact). The lattice
         // itself (cells - placement geometry AND the visible grid) is
@@ -273,7 +258,6 @@ Game.prototype.start = function() {
     }
 
     // Reset core game state variables
-    this.lastShotPathData = null;
     // Interruptibility ("queue test"): start() runs once per page load, so
     // restoring here means closing the tab mid-streak and reopening resumes
     // it - the game un-pauses rather than punishing the interruption.
@@ -434,13 +418,13 @@ Game.prototype.animate = function(timestamp) {
     }
 
     // --- State-Dependent Simulation Stepping ---
-    // Flick's persistent ball can be mid-settle in ANY state (intro drop,
-    // post-round bounce, set-down): step whenever a dynamic ball exists.
+    // The persistent ball can be mid-settle in ANY state (the intro drop,
+    // a post-round bounce, a set-down): step whenever a dynamic ball exists.
     const anyDynamicBall = this.balls.some(b => !b.isStatic && !b.sleeping);
     const inPhysicsState =
         this.currentState === GameStates.SHOT_TAKEN ||
         this.currentState === GameStates.RESETTING ||
-        (this.inputScheme === 'flick' && anyDynamicBall);
+        anyDynamicBall;
 
     if (inPhysicsState) {
         this.accumulator += this.deltaTime;
@@ -493,7 +477,6 @@ Game.prototype.animate = function(timestamp) {
  * Called only from the accumulator loop in animate().
  */
 Game.prototype.stepSimulation = function() {
-    this.shotStepsElapsed++; // One fixed step of real flight consumed
     // Store position before physics: prePixelY drives the hoop-crossing win
     // check, and BOTH axes drive render interpolation between steps.
     this.balls.forEach(ball => {
@@ -558,13 +541,9 @@ Game.prototype.updateFateTransit = function() {
             // registerScore already started the 'score' transit this step -
             // reaching here means it crossed OUTSIDE the posts.
             this.startFateTransit('miss');
-        } else if (!this.floorSolid && ball.pixelY > hoopY && ball.preVelY <= 0 && ball.velocity.y > 0) {
-            // DRAG (open floor): apex below the line - the ball never
-            // reached hoop height and can never rise again; fate sealed
-            // the moment it started falling.
-            this.startFateTransit('miss');
-        } else if (this.floorSolid && ball.pixelY > hoopY) {
-            // FLICK (solid floor): the apex rule is FALSE here - the ball
+        } else if (ball.pixelY > hoopY) {
+            // The old apex rule - "falling below the hoop means doomed" -
+            // is FALSE against a solid floor, because the ball
             // can bounce and rise again. Fate seals on ENERGY instead: the
             // ball's "potential head" P (max height above the floor it
             // could ever reach, treating all its speed as vertical and
@@ -758,7 +737,6 @@ Game.prototype.startHoopCycle = function() {
     // through: by now the score is final for the round about to begin.
     this.displayLevel = this.score + 1;
     if (this.resetTimerId) { clearTimeout(this.resetTimerId); this.resetTimerId = null; } // Safety clear
-    this.lastShotPathData = null;
     this.hasScored = false; // Ensure score flag is reset for the new hoop
 
     // HOLD THE WORLD: the level-1 redraw is this exact hoop - keep the
@@ -781,15 +759,10 @@ Game.prototype.startHoopCycle = function() {
         console.warn('Game: holdWorld mismatch - rebuilding hoop.', placed, cp);
     }
 
-    // Remove old dynamic elements. FLICK: the ball is PERSISTENT - the
-    // hoop cycle replaces the court around it, never the ball itself.
-    if (this.inputScheme === 'flick') {
-        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop));
-        this.nodes = []; this.lines = [];
-    } else {
-        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop || el instanceof Ball));
-        this.nodes = []; this.lines = []; this.balls = []; this.currentBall = null;
-    }
+    // Remove old dynamic elements. The ball is PERSISTENT - the hoop cycle
+    // replaces the court around it, never the ball itself.
+    this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop));
+    this.nodes = []; this.lines = [];
 
     this.redefineVariables(); // Recalculate layout/sizes (no game-state side effects)
 
@@ -832,152 +805,21 @@ Game.prototype.handleResize = function() {
  * @param {number} startX - Mouse X coordinate relative to canvas.
  * @param {number} startY - Mouse Y coordinate relative to canvas.
  */
+/**
+ * PICK THE BALL UP. Input arrives in logical canvas coordinates (converted
+ * once in InputHandler.getCanvasPos) and everything downstream stays in
+ * that space. The ball is persistent, so there is nothing to create here -
+ * only something to take hold of.
+ */
 Game.prototype.startAiming = function(startX, startY) {
-    dbg("Game: Starting Aim setup.");
-    // Input arrives in logical canvas coordinates (converted once in
-    // InputHandler.getCanvasPos). All aim math stays in that space -
-    // no rendering-scale factors belong anywhere in game logic.
-    this.aimStartX = startX;
-    this.aimStartY = startY;
-    // Live pointer position during the aim - the abort/commit rule and the
-    // shoot line's feedback both read it. Starts at the press point.
-    this.aimCurrentX = startX;
-    this.aimCurrentY = startY;
-    if (this.inputScheme === 'flick' && this.currentBall) {
-        // Pick up the persistent resting ball: wake it, hold it (static
-        // while carried - the gesture, not physics, moves it).
-        this.currentBall.sleeping = false;
-        this.currentBall.isStatic = true;
-        this.currentBall.velocity = { x: 0, y: 0 };
-        this.currentBall.trail = [];
-        this.moveCarriedBall(startX, startY);
-    } else if (!this.currentBall) { // Only create ball on the very first aim action
-        const startGridY = Math.min(this.ROWS - 0.5, (startY / this.cellRes));
-        const startGridX = Math.max(0.5, Math.min(this.COLUMNS - 0.5, (startX / this.cellRes)));
-        this.currentBall = new Ball(startGridX, startGridY, this);
-        this.balls.push(this.currentBall);
-        this.elements.push(this.currentBall);
-        dbg("Game: Created new ball for aiming.");
-    }
-    this.updateAim(startX, startY); // Calculate initial velocity based on start pos
-};
-
-/**
- * Updates the hypothetical velocity of the ball based on mouse drag distance/angle.
- * Called by InputHandler during AIMING state mousemove.
- * AIMING DIRECTION REVERSED. MAX DRAG DISTANCE USES CANVAS HEIGHT MULTIPLIER FROM CONFIG.
- * @param {number} currentX - Current mouse X relative to canvas.
- * @param {number} currentY - Current mouse Y relative to canvas.
- */
-Game.prototype.updateAim = function(currentX, currentY) {
-    if (this.currentState !== GameStates.AIMING || !this.currentBall) return; // Only run if aiming
-
-    // Everything below is in LOGICAL canvas pixels - the same space the
-    // physics simulates in. Drag distance and max-drag are therefore
-    // directly comparable (previously they were in mismatched units).
-    this.aimCurrentX = currentX;
-    this.aimCurrentY = currentY;
-
-    const dx = currentX - this.aimStartX;
-    const dy = currentY - this.aimStartY;
-    const angle = Math.atan2(dy, dx); // Angle from start point TO current point
-    const dragDistance = Math.sqrt(dx * dx + dy * dy);
-
-    // Max drag is a fraction of the board's logical height. Derive it from
-    // the grid (ROWS * cellRes) rather than the canvas backbuffer, so it is
-    // independent of any rendering resolution scaling.
-    const boardHeight = this.ROWS * this.cellRes;
-    const maxDragDistance = boardHeight * CONFIG.PHYSICS.MAX_DRAG_HEIGHT_MULTIPLIER;
-
-    const clampedDistance = Math.min(dragDistance, maxDragDistance); // Clamp drag power
-    // this.speed = cellRes * AIMING_SENSITIVITY_SCALE, so this simplifies to
-    // clampedDistance * AIMING_SENSITIVITY_SCALE - i.e. launch speed is a
-    // resolution-independent function of how far the player dragged.
-    const baseVelocityMagnitude = (clampedDistance / this.cellRes) * this.speed;
-
-    // Set the velocity the ball WILL have if shot right now
-    // Apply velocity IN THE DIRECTION of the drag
-    this.currentBall.hypotheticalVelocity = {
-        x: Math.cos(angle) * baseVelocityMagnitude,
-        y: Math.sin(angle) * baseVelocityMagnitude
-    };
-};
-
-/**
- * Applies the calculated hypothetical velocity to the ball and releases it.
- * Called when transitioning from AIMING to SHOT_TAKEN state.
- */
-Game.prototype.shoot = function() {
-    if (this.currentState !== GameStates.AIMING || !this.currentBall) { // Should technically not happen if state logic is correct
-        console.warn("Game: Shoot called but not in AIMING state or no currentBall.");
-        return;
-    }
-    dbg("Game: Applying velocity for shot.");
-
-    // Store data needed to draw the persistent path later
-    this.lastShotPathData = {
-        startX: this.currentBall.pixelX, startY: this.currentBall.pixelY,
-        velocityX: this.currentBall.hypotheticalVelocity.x,
-        velocityY: this.currentBall.hypotheticalVelocity.y,
-        radius: this.currentBall.radius,
-        // Capture NOW, before the counter increments: the persisted path
-        // must match the prediction the player just aimed with.
-        predictionSteps: this.getPredictionSteps()
-    };
-
-    // This shot counts toward the teaching wean (persisted - reloading can
-    // never rewind the tutorial for a free assisted shot).
-    this.teachShotsTaken++;
-    Persistence.save('teachShots', this.teachShotsTaken);
-
-    // Steps the ball has actually flown this shot - drives the persisted
-    // path's dot consumption (each simulated point vanishes as the real
-    // ball reaches it; they correspond exactly, step for step).
-    this.shotStepsElapsed = 0;
-
-    this.fateTransit = null; // New shot, fate unknown
-    this.roundInvalidated = false; // New shot, rules unbroken
-
-    // Apply the final calculated velocity
-    this.currentBall.prePixelY = this.currentBall.pixelY; // Store Y pos before physics
-    this.currentBall.velocity = { ...this.currentBall.hypotheticalVelocity }; // Copy velocity
-    this.currentBall.release(); // Make ball dynamic (isStatic = false)
-
-    // Degenerate apex: a shot launched level-or-downward is already falling -
-    // its launch IS its apex, so its fate transit starts immediately.
-    if (this.currentBall.velocity.y >= 0) {
-        this.startFateTransit('miss');
-    }
-};
-
-/**
- * DEBUG affordance: rewinds the teaching wean to shot 1, as if this were a
- * brand-new player. Bound to the R key. Persisted immediately so it also
- * survives a reload.
- */
-Game.prototype.resetTeaching = function() {
-    this.teachShotsTaken = 0;
-    Persistence.save('teachShots', 0);
-    dbg('Game: Teaching wean reset - next shot shows the full path.');
-};
-
-/**
- * Returns how many steps of prediction path the CURRENT shot should show.
- * The single authority on path visibility: renderer asks, never decides.
- * 0 means no path. Driven by the teaching wean (TEACHING_PATH_STEPS indexed
- * by shots taken), overridden wholesale by the debug flag.
- * @returns {number}
- */
-Game.prototype.getPredictionSteps = function() {
-    // Flick has no velocity until the instant of release - there is
-    // structurally nothing to predict during the gesture, so the teaching
-    // path is drag-only. (Ghost trails are flick's teaching candidate.)
-    if (this.inputScheme === 'flick') return 0;
-    if (CONFIG.RENDER.PREDICTION_PATH_ALWAYS) {
-        return CONFIG.GAME.PREDICTION_FRAMES; // Debug: full path, always
-    }
-    const steps = CONFIG.GAME.TEACHING_PATH_STEPS;
-    return this.teachShotsTaken < steps.length ? steps[this.teachShotsTaken] : 0;
+    if (!this.currentBall) return;
+    dbg("Game: Ball picked up.");
+    // Held: static while carried, because the gesture moves it, not physics.
+    this.currentBall.sleeping = false;
+    this.currentBall.isStatic = true;
+    this.currentBall.velocity = { x: 0, y: 0 };
+    this.currentBall.trail = [];
+    this.moveCarriedBall(startX, startY);
 };
 
 /**
@@ -1121,12 +963,6 @@ Game.prototype.resetStreak = function() {
     } else {
         Palette.resetRun(); // Timed drain to the start pole, then reroll
     }
-
-    if (CONFIG.GAME.TEACHING_SCOPE === 'run') {
-        // Warm-up ritual: each new run begins with the wean again.
-        this.teachShotsTaken = 0;
-        Persistence.save('teachShots', 0);
-    }
 };
 
 /**
@@ -1138,10 +974,11 @@ Game.prototype.resetStreak = function() {
  * so cancelling is purely a state transition.
  */
 /**
- * FLICK: whether the floor is solid (scheme-derived; see physics.js).
+ * The floor is solid: the ball bounces, settles and waits to be picked up.
+ * (Kept as a property because physics.js asks the world, not the config.)
  */
 Object.defineProperty(Game.prototype, 'floorSolid', {
-    get: function() { return this.inputScheme === 'flick'; }
+    get: function() { return true; }
 });
 
 /**
@@ -1212,8 +1049,6 @@ Game.prototype.onFloorContact = function(ball) {
  */
 Game.prototype.moveCarriedBall = function(x, y) {
     if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
-    this.aimCurrentX = x;
-    this.aimCurrentY = y;
     const r = this.currentBall.radius;
     const minX = r, maxX = this.COLUMNS * this.cellRes - r;
     let minY = r;
@@ -1258,7 +1093,6 @@ Game.prototype.releaseCarriedBall = function(vx, vy) {
  * directions. Whatever leaves your area is an attempt.
  */
 Game.prototype.checkShotPromotion = function() {
-    if (this.inputScheme !== 'flick') return;
     if (this.currentState !== GameStates.READY_TO_AIM) return;
     // CUSTODY: the rule is "a RELEASE is a shot if the ball's centre
     // exits the zone" - and a ball still carrying momentum from a
@@ -1281,68 +1115,13 @@ Game.prototype.checkShotPromotion = function() {
     }
 };
 
-/**
- * FLICK: commits a throw with the gesture's release velocity (px/step).
- * Reuses the drag pipeline end-to-end: velocity in, everything else
- * (teaching count, fate machinery, states) identical between schemes.
- */
-Game.prototype.shootWithVelocity = function(vx, vy) {
-    if (this.currentState !== GameStates.AIMING || !this.currentBall) return;
-    this.currentBall.hypotheticalVelocity = { x: vx, y: vy };
-    this.shoot();
-};
-
-/**
- * Switches input scheme (persisted) and restarts the run - the testing
- * toggle's action. Safe in any state: requestRestart handles cleanup.
- */
-Game.prototype.toggleInputScheme = function() {
-    this.inputScheme = this.inputScheme === 'drag' ? 'flick' : 'drag';
-    Persistence.save('inputScheme', this.inputScheme);
-    dbg('Game: input scheme ->', this.inputScheme);
-    this.requestRestart();
-
-    if (this.inputScheme === 'flick') {
-        // Entering flick replays the intro: the world empties, the ball
-        // drops in, its landing raises the court.
-        this.elements = this.elements.filter(el => !(el instanceof Node || el instanceof Hoop || el instanceof Ball));
-        this.nodes = []; this.lines = []; this.balls = []; this.currentBall = null;
-        this.fateTransit = null;
-        this.spawnDropBall();
-        this.transitionTo(GameStates.SHOT_TAKEN);
-    }
-    // Entering drag: requestRestart's READY state + existing hoop (or the
-    // next cycle) restore the drag flow; the persistent ball was cleared
-    // by the READY entry action (drag clears balls).
-};
-
-/**
- * Whether releasing the drag RIGHT NOW would abort rather than shoot.
- * The rule: the shoot line is the commitment threshold - a release still
- * inside the shoot zone (where drags begin) means "no, wait", and the ball
- * quietly returns to waiting. Since every drag starts in the zone, every
- * committed shot's vector points upward BY CONSTRUCTION - flat/downward
- * launches (physically worthless here) are fenced out at the input layer.
- * Single authority: input routes by it, the renderer draws feedback by it.
- * @returns {boolean}
- */
-Game.prototype.wouldReleaseAbort = function() {
-    // Flick decides abort by RELEASE VELOCITY (a slow release sets the
-    // ball down), which is unknowable mid-gesture - so the position rule
-    // and the shoot line's firming feedback are drag-only.
-    if (this.inputScheme === 'flick') return false;
-    if (this.currentState !== GameStates.AIMING) return false;
-    const shootAreaY = (this.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.cellRes;
-    return this.aimCurrentY >= shootAreaY;
-};
-
 Game.prototype.cancelAim = function() {
     if (this.currentState !== GameStates.AIMING) {
         console.warn("Game: cancelAim called but not in AIMING state.");
         return;
     }
     dbg("Game: Cancelling aim, returning to READY_TO_AIM.");
-    if (this.inputScheme === 'flick' && this.currentBall) {
+    if (this.currentBall) {
         // Set-down: the ball physically DROPS from the hand and settles
         // on the floor - a cancel you can see, not a vanishing.
         this.currentBall.sleeping = false;
@@ -1404,17 +1183,9 @@ Game.prototype.transitionTo = function(newState) {
             // Cleanup after reset or on initial start
             dbg("Entered READY_TO_AIM state: Cleaning up for new round.");
             this.hasScored = false; // Reset score flag for the new potential shot
-            this.lastShotPathData = null; // Clear any old persisted path data
-            if (this.inputScheme === 'flick') {
-                // FLICK: the ball is PERSISTENT - it stays in the world
-                // (bouncing to rest, or mid-settle) and remains the
-                // currentBall, waiting to be picked up.
-            } else {
-                this.currentBall = null; // No ball should be active
-                // Ensure all ball objects are removed from simulation/rendering lists
-                this.elements = this.elements.filter(el => !(el instanceof Ball));
-                this.balls = [];
-            }
+            // The ball is PERSISTENT: it stays in the world (bouncing to
+            // rest, or mid-settle) and remains the currentBall, waiting to
+            // be picked up again.
              // Hoop cycle is handled by start() or initiateLevelResetLogic() before this transition occurs.
             break;
 

@@ -234,7 +234,6 @@ var Palette = (function() {
             // becomes an invisible-in-one-theme bug, not an error.
             INK: inkHex,
             BALL: inkHex, NODE: inkHex, HOOP: inkHex,
-            PREDICTION_LINE: inkHex, // Drawn at RENDER.PREDICTION_ALPHA
             GRID_STROKE: hsbToHex(cell2.H, cell2.S, cell2.B)
         };
     }

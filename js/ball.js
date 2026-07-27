@@ -12,7 +12,6 @@ class Ball {
         this.pixelY = this.gridY * this.game.cellRes;
 
         this.velocity = { x: 0, y: 0 }; // Actual velocity used by physics
-        this.hypotheticalVelocity = { x: 0, y: 0 }; // Velocity during aiming
 
         // Fading position trail (drawn when CONFIG.RENDER.DRAW_TRAIL)
         this.trail = [];
