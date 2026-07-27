@@ -1066,11 +1066,12 @@ Game.prototype.startFateTransit = function(mode) {
  * Ball detects the crossing, but scoring bookkeeping (streak, best, and
  * persistence) is the Game's concern.
  */
-Game.prototype.registerScore = function() {
+Game.prototype.registerScore = function(crossSpeed) {
     Capture.finish(true);
-    // Sounded at the hoop, where it is decided - and pitched by the run so
-    // far, so the streak climbs the ladder as it grows.
-    Audio.score(this.score);
+    // Sounded at the hoop, where it is decided - pitched by the run so far,
+    // so the streak climbs the ladder, and struck at the speed it passed
+    // through, in cells so it feels the same on any screen.
+    Audio.score(this.score, (crossSpeed || 0) / this.cellRes);
     this.score++;
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);

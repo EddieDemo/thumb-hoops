@@ -66,7 +66,11 @@ class Ball {
 
             if (withinPosts) {
                 dbg('Ball checkForWin: Score detected!');
-                game.registerScore(); // Game owns all scoring bookkeeping
+                // The speed it passed through at - the pluck answers it,
+                // exactly as every collision answers its own impact.
+                const speed = Math.sqrt(this.velocity.x * this.velocity.x +
+                                        this.velocity.y * this.velocity.y);
+                game.registerScore(speed); // Game owns all scoring bookkeeping
                 // Reset transition will be triggered by floor hit
             }
         }

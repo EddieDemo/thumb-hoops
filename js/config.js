@@ -245,23 +245,43 @@ var CONFIG = {
         // and everything the bronze says the screen already said.
 
         STEP_CENTS: 240,     // sléndro: five even steps to the octave
-        PEG_HZ: 264,         // the lowest peg (lattice intersection 0)
+
+        // ONE FOUNDING. Every voice's root is derived from this anchor by
+        // whole octaves, so the whole court is provably one gamelan and no
+        // voice can drift off the ladder. (It did: the string was picked by
+        // ear at 330Hz, which is 386 cents above the root - a just major
+        // third, a Western interval that exists nowhere in sléndro, so its
+        // every note clashed with the bronze still ringing underneath it.)
+        ANCHOR_HZ: 132,
+        GONG_OCT: -1,        // the gong speaks an octave below the world's floor
+        LOW_OCT: 0,          // walls and floor: the anchor itself
+        PEG_OCT: 1,
+        STRING_OCT: 1,       // the run begins HOME - the same note the
+                             // leftmost peg plays - and climbs from there
+
         PEG_DECAY_S: 1.6,    // shorter than a real bonang: the court must clear
         PEG_GAIN: 0.9,
         // THE BASKET is a pluck at the hoop - a string, so the game's most
         // important event is the one thing that doesn't sound like struck
         // metal. It climbs: each basket takes the next rung, wrapping an
         // octave every five, so a run is audibly a rising line.
-        STRING_HZ: 330,
         STRING_DECAY_S: 1.4,
         STRING_GAIN: 0.8,
         STRING_MAX_OCT: 2,   // beyond this the ladder cycles in the top octave
                              // rather than climbing into a shriek
 
+        // The pluck answers the speed it was crossed at - but over a NARROW
+        // range, because the physics runs against the drama here: a rattle-in
+        // has spent its energy on the pegs and crosses slowly, while a flat
+        // hard shot crosses fast. At full dynamics the hard-won basket would
+        // be the quiet one. MIN_LEVEL is the floor a basket never drops below.
+        STRING_SOFT_SPEED: 0.14,   // cells/step: a slow drop through
+        STRING_FULL_SPEED: 0.50,   // ...and a fast one
+        STRING_MIN_LEVEL: 0.7,
+
         // THE GONG closes the gongan - and a run's cycle ends when it is
         // LOST, not when it is extended. It sounds on the miss, as the ball
         // settles, just behind the floor's own thud.
-        GONG_HZ: 66,
         GONG_DECAY_S: 2.6,
         GONG_GAIN: 0.85,
         GONG_LAG_MS: 16,        // two players are never in perfect unison...
@@ -276,7 +296,6 @@ var CONFIG = {
         // the whole lattice is playable. The floor does not: it is the
         // ground, one pitch, and since it fires more than anything else
         // in the game it is the quietest thing here.
-        LOW_HZ: 132,
         LOW_DECAY_S: 1.2,    // shorter than the pegs: thuds must not pile up
         WALL_GAIN: 0.42,
         FLOOR_GAIN: 0.30,

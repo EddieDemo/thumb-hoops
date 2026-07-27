@@ -219,26 +219,39 @@ var Audio = (function() {
         }
     }
 
+    /** A voice's root, derived from the one founding. */
+    function rootHz(octaves) {
+        return cfg().ANCHOR_HZ * Math.pow(2, octaves);
+    }
+
     function renderAll() {
         const c = cfg();
+        const pegHz = rootHz(c.PEG_OCT);
+        const lowHz = rootHz(c.LOW_OCT);
+        const gongHz = rootHz(c.GONG_OCT);
+        const strHz = rootHz(c.STRING_OCT);
         Promise.all([
-            renderVoice(VOICES.peg, c.PEG_HZ, c.PEG_DECAY_S, 0.35),
-            renderVoice(VOICES.peg, c.PEG_HZ, c.PEG_DECAY_S, 1.0),
-            renderVoice(VOICES.gong, c.GONG_HZ, c.GONG_DECAY_S, 0.9),
-            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 0.35),
-            renderVoice(VOICES.low, c.LOW_HZ, c.LOW_DECAY_S, 1.0),
+            renderVoice(VOICES.peg, pegHz, c.PEG_DECAY_S, 0.35),
+            renderVoice(VOICES.peg, pegHz, c.PEG_DECAY_S, 1.0),
+            renderVoice(VOICES.gong, gongHz, c.GONG_DECAY_S, 0.9),
+            renderVoice(VOICES.low, lowHz, c.LOW_DECAY_S, 0.35),
+            renderVoice(VOICES.low, lowHz, c.LOW_DECAY_S, 1.0),
             // One string per octave. Repitching a single buffer across the
             // whole ladder would leave the top of a long run almost
             // inaudible - a 7x rate turns 1.4s of ring into 0.2s. Casting
             // per octave keeps every rung a real note, and each is a
             // little shorter than the one below, as higher strings are.
-            renderVoice(VOICES.string, c.STRING_HZ, c.STRING_DECAY_S, 1.0),
-            renderVoice(VOICES.string, c.STRING_HZ * 2, c.STRING_DECAY_S * 0.8, 1.0),
-            renderVoice(VOICES.string, c.STRING_HZ * 4, c.STRING_DECAY_S * 0.64, 1.0)
+            renderVoice(VOICES.string, strHz, c.STRING_DECAY_S, 0.4),
+            renderVoice(VOICES.string, strHz, c.STRING_DECAY_S, 1.0),
+            renderVoice(VOICES.string, strHz * 2, c.STRING_DECAY_S * 0.8, 0.4),
+            renderVoice(VOICES.string, strHz * 2, c.STRING_DECAY_S * 0.8, 1.0),
+            renderVoice(VOICES.string, strHz * 4, c.STRING_DECAY_S * 0.64, 0.4),
+            renderVoice(VOICES.string, strHz * 4, c.STRING_DECAY_S * 0.64, 1.0)
         ]).then(bufs => {
             voices = { pegSoft: bufs[0], pegHard: bufs[1], gong: bufs[2],
                        lowSoft: bufs[3], lowHard: bufs[4],
-                       strings: [bufs[5], bufs[6], bufs[7]] };
+                       // [octave][0 = softly plucked, 1 = hard]
+                       strings: [[bufs[5], bufs[6]], [bufs[7], bufs[8]], [bufs[9], bufs[10]]] };
             ready = true;
             dbg('Audio: bronze cast.');
         }).catch(() => {
@@ -396,17 +409,32 @@ var Audio = (function() {
      * back to the bottom: the whole arc is hearable.
      *
      * @param {number} streak - baskets BEFORE this one, so the first is home.
+     * @param {number} speed  - how fast it crossed, in cells per step. The
+     *        pluck answers it, as every collision answers its impact - but
+     *        over a NARROW range. A basket is a binary achievement, and the
+     *        physics here runs against the drama: a ball that rattles in has
+     *        spent energy on the pegs and crosses slowly, while a flat hard
+     *        shot crosses fast. Full dynamics would make the hard-won shot
+     *        the quiet one. So the range is compressed: every basket lands
+     *        clearly, and speed colours it rather than deciding it.
      */
-    function score(streak) {
+    function score(streak, speed) {
         if (!enabled() || !ready || !ctx) return;
         const c = cfg();
         const k = Math.max(0, streak | 0);
         const oct = Math.min(Math.floor(k / 5), c.STRING_MAX_OCT);
         const degree = k % 5;
+
+        const sp = isFinite(speed) ? speed : c.STRING_FULL_SPEED;
+        const t = Math.max(0, Math.min(1,
+            (sp - c.STRING_SOFT_SPEED) / Math.max(0.0001, c.STRING_FULL_SPEED - c.STRING_SOFT_SPEED)));
+        const pair = voices.strings[oct];
+        const buf = t < 0.5 ? pair[0] : pair[1];
+        const gain = c.STRING_GAIN * (c.STRING_MIN_LEVEL + (1 - c.STRING_MIN_LEVEL) * t);
+
         const now = ctx.currentTime;
         reap(now);
-        play(voices.strings[oct], Math.pow(2, (degree * c.STEP_CENTS) / 1200),
-             c.STRING_GAIN, now, false);
+        play(buf, Math.pow(2, (degree * c.STEP_CENTS) / 1200), gain, now, false);
     }
 
     /**
