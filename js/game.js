@@ -1150,10 +1150,25 @@ Object.defineProperty(Game.prototype, 'floorSolid', {
  * world; its first landing raises the court (see onFloorContact).
  */
 Game.prototype.spawnDropBall = function() {
-    const startGridX = this.COLUMNS / 2;
+    // Only the throw is orchestrated: a place to let go from, and a
+    // direction to let go in. Everything after is physics - it banks off
+    // whatever it meets and comes to rest wherever that leaves it, which
+    // is exactly what happens after every round anyway. The tidy centred
+    // drop was the odd one out.
+    const I = CONFIG.INTRO;
+    const m = I.SPAWN_MARGIN_CELLS;
+    const startGridX = m + Math.random() * Math.max(0, this.COLUMNS - 2 * m);
     const ball = new Ball(startGridX, -1.5, this);
     ball.release(); // Dynamic immediately - it's falling
-    ball.velocity = { x: 0, y: 0 };
+
+    if (Math.random() < I.STRAIGHT_CHANCE) {
+        ball.velocity = { x: 0, y: 0 };            // straight down
+    } else {
+        ball.velocity = {
+            x: (Math.random() * 2 - 1) * I.VX_MAX_CELLS * this.cellRes,
+            y: Math.random() * I.VY_MAX_CELLS * this.cellRes
+        };
+    }
     this.currentBall = ball;
     this.balls = [ball];
     this.elements.push(ball);

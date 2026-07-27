@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v57',
+    VERSION: 'v58',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -323,6 +323,27 @@ var CONFIG = {
         MAX_VOICES: 10,      // beyond this the oldest voice is stolen, not refused
 
         RENDER_RATE_HZ: 22050  // offline render rate for the cast buffers
+    },
+
+    // --- THE ENTRANCE ---
+    // The ball arrives from above the ceiling to begin a session. Only the
+    // THROW is orchestrated - where it starts and how it is let go. Once
+    // it is falling nothing touches it again: it banks off whatever it
+    // meets and settles where it settles.
+    //
+    // Deliberately NOT part of the daily seed. Seeding belongs to whatever
+    // affects fairness, and the entrance is scored by nobody; folding it in
+    // would only make it identical on every reload of the same day, which
+    // is the opposite of what it is for. Random gives a new arrival each
+    // time the court is opened - and now that the world is audible, a new
+    // little phrase with it: wall, wall, floor.
+    INTRO: {
+        STRAIGHT_CHANCE: 0.25,     // a plain vertical drop stays in the deck
+        SPAWN_MARGIN_CELLS: 0.75,  // ...released this far in from each wall
+        VX_MAX_CELLS: 0.34,        // sideways throw, cells/step: about two
+                                   // wall banks in the time it takes to fall
+        VY_MAX_CELLS: 0.12         // a little downward push, so arrivals
+                                   // differ in pace as well as in path
     },
 
     GAME: {
