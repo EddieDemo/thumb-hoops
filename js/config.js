@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v65',
+    VERSION: 'v66',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -282,6 +282,44 @@ var CONFIG = {
         // settles, just behind the floor's own thud.
         GONG_DECAY_S: 2.6,
         GONG_GAIN: 0.85,
+        // --- THE COLOTOMY ---
+        // A streak is a structure of nested cycles; so is a gongan. These
+        // mark the run's own boundaries, sounding just BEHIND the string -
+        // a colotomic player sits a fraction behind the melody, which is
+        // both how an ensemble really behaves and how these stay clear of
+        // the pluck in the mix.
+        //
+        // PITCH FOLLOWS ORGANOLOGY, exactly as it does in the tradition.
+        // Kenong (a set of large kettles) and kempul (a set of hanging
+        // gongs) are PLAYED by choosing the one that matches the goal tone,
+        // so they take the rung's own degree and climb with the string.
+        // Kethuk is ONE small damped kettle - it has no other pitch to pick.
+        //
+        // Intervals are knobs because the right numbers depend on how long
+        // real runs actually are, which the tester round will measure.
+        COLOTOMY: {
+            ENABLED: true,
+            LAG_MS: 55,             // behind the string pluck
+            LAG_JITTER_MS: 18,      // ...varied, so it reads as a player
+
+            KETHUK_EVERY: 2,        // the clock: dense, dry, unpitched
+            KENONG_EVERY: 4,        // the major boundary
+            KEMPUL_EVERY: 4,        // ...and the beat between two kenongs
+            KEMPUL_OFFSET: 2,       // 6, 10, 14 - interleaved, per the form
+
+            KETHUK_OCT: 0,          // one kettle, one pitch, forever
+            KETHUK_DEGREE: 1,
+            KENONG_OCT: 0,          // roots; the degree is added at strike
+            KEMPUL_OCT: -1,         // between the great gong and the walls
+
+            KETHUK_DECAY_S: 0.26,   // damped - the dryness IS the instrument
+            KENONG_DECAY_S: 1.60,
+            KEMPUL_DECAY_S: 2.00,
+            KETHUK_GAIN: 0.45,
+            KENONG_GAIN: 0.62,
+            KEMPUL_GAIN: 0.58
+        },
+
         GONG_LAG_MS: 16,        // two players are never in perfect unison...
         GONG_LAG_JITTER_MS: 12, // ...and a FIXED offset reads as an echo,
                                 // where a varying one reads as two people

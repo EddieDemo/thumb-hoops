@@ -115,6 +115,45 @@ var Audio = (function() {
             ombak: { beatHz: 1.8, depth: 0.35 },
             attack: 0.001
         },
+        // --- THE COLOTOMY ---------------------------------------------
+        // Punctuation, not melody. Real gamelan splits these by ORGANOLOGY,
+        // and so does this: KETHUK is a single small kettle - one object,
+        // one pitch, damped so it barely rings - while KENONG (large
+        // kettles) and KEMPUL (hanging gongs) are SETS, so their player
+        // picks the one matching the goal tone. Sets follow the melody;
+        // single objects cannot. The great gong is a single object too,
+        // which is why it never changes pitch either.
+        kethuk: {   // small, dry, damped. The clock.
+            partials: [
+                { r: 1.000, g: 1.00, d: 1.00 },
+                { r: 1.610, g: 0.30, d: 0.45 },
+                { r: 2.480, g: 0.10, d: 0.25 }
+            ],
+            strike: { fMul: 4, q: 1.4, level: 0.22, decay: 0.010 },
+            ombak: { beatHz: 0, depth: 0 },
+            attack: 0.002
+        },
+        kenong: {   // a large kettle: round, resonant, quicker than a gong
+            partials: [
+                { r: 1.000, g: 1.00, d: 1.00 },
+                { r: 1.520, g: 0.40, d: 0.70 },
+                { r: 2.400, g: 0.16, d: 0.45 },
+                { r: 3.700, g: 0.06, d: 0.25 }
+            ],
+            strike: { fMul: 3, q: 1.0, level: 0.16, decay: 0.020 },
+            ombak: { beatHz: 2.6, depth: 0.30 },
+            attack: 0.008
+        },
+        kempul: {   // a hanging gong, smaller than the great one
+            partials: [
+                { r: 1.000, g: 1.00, d: 1.00 },
+                { r: 1.470, g: 0.34, d: 0.80 },
+                { r: 2.280, g: 0.12, d: 0.50 }
+            ],
+            strike: { fMul: 2.6, q: 0.9, level: 0.13, decay: 0.026 },
+            ombak: { beatHz: 3.1, depth: 0.5 },
+            attack: 0.010
+        },
         gong: {
             partials: [
                 { r: 1.000, g: 1.00, d: 1.00 },
@@ -246,12 +285,21 @@ var Audio = (function() {
             renderVoice(VOICES.string, strHz * 2, c.STRING_DECAY_S * 0.8, 0.4),
             renderVoice(VOICES.string, strHz * 2, c.STRING_DECAY_S * 0.8, 1.0),
             renderVoice(VOICES.string, strHz * 4, c.STRING_DECAY_S * 0.64, 0.4),
-            renderVoice(VOICES.string, strHz * 4, c.STRING_DECAY_S * 0.64, 1.0)
+            renderVoice(VOICES.string, strHz * 4, c.STRING_DECAY_S * 0.64, 1.0),
+            // The colotomy. Kenong and kempul are cast at their ROOT and
+            // repitched by degree at strike time (they are sets, so they
+            // follow); kethuk is one kettle and never moves.
+            renderVoice(VOICES.kethuk, rootHz(c.COLOTOMY.KETHUK_OCT) *
+                Math.pow(2, c.COLOTOMY.KETHUK_DEGREE * c.STEP_CENTS / 1200),
+                c.COLOTOMY.KETHUK_DECAY_S, 0.9),
+            renderVoice(VOICES.kenong, rootHz(c.COLOTOMY.KENONG_OCT), c.COLOTOMY.KENONG_DECAY_S, 0.9),
+            renderVoice(VOICES.kempul, rootHz(c.COLOTOMY.KEMPUL_OCT), c.COLOTOMY.KEMPUL_DECAY_S, 0.9)
         ]).then(bufs => {
             voices = { pegSoft: bufs[0], pegHard: bufs[1], gong: bufs[2],
                        lowSoft: bufs[3], lowHard: bufs[4],
                        // [octave][0 = softly plucked, 1 = hard]
-                       strings: [[bufs[5], bufs[6]], [bufs[7], bufs[8]], [bufs[9], bufs[10]]] };
+                       strings: [[bufs[5], bufs[6]], [bufs[7], bufs[8]], [bufs[9], bufs[10]]],
+                       kethuk: bufs[11], kenong: bufs[12], kempul: bufs[13] };
             ready = true;
             dbg('Audio: bronze cast.');
         }).catch(() => {
@@ -438,6 +486,44 @@ var Audio = (function() {
     }
 
     /**
+     * THE COLOTOMY: the run's own nested cycles, made audible. A streak is
+     * a structure of cycles and so is a gongan, so the punctuation that
+     * marks one can mark the other.
+     *
+     * Sounded just BEHIND the string, not with it - a colotomic player sits
+     * a fraction behind the melody, which is both how an ensemble really
+     * behaves and how these stay out of the pluck's way in the mix.
+     *
+     * @param {number} streak - baskets made, AFTER this one.
+     * @param {number} delayS - the lag behind the string.
+     */
+    function colotomy(streak, delayS) {
+        if (!enabled() || !ready || !ctx) return;
+        const c = cfg(), C = c.COLOTOMY;
+        if (!C || !C.ENABLED) return;
+        const k = streak | 0;
+        if (k <= 0) return;
+
+        const now = ctx.currentTime + (isFinite(delayS) ? Math.max(0, delayS) : 0);
+        reap(ctx.currentTime);
+
+        // Kenong and kempul are SETS: they take the rung's own degree, so
+        // they climb with the string. Kethuk is one kettle - it cannot.
+        const degRate = Math.pow(2, ((k % 5) * c.STEP_CENTS) / 1200);
+
+        if (C.KENONG_EVERY > 0 && k % C.KENONG_EVERY === 0) {
+            play(voices.kenong, degRate, C.KENONG_GAIN, now, false);
+        }
+        if (C.KEMPUL_EVERY > 0 && k >= C.KEMPUL_OFFSET &&
+            (k - C.KEMPUL_OFFSET) % C.KEMPUL_EVERY === 0) {
+            play(voices.kempul, degRate, C.KEMPUL_GAIN, now, false);
+        }
+        if (C.KETHUK_EVERY > 0 && k % C.KETHUK_EVERY === 0) {
+            play(voices.kethuk, 1, C.KETHUK_GAIN, now, false);
+        }
+    }
+
+    /**
      * The GONG: the gongan closing. In gamelan the gong marks the end of
      * a cycle - and a run's cycle ends when it is LOST, not when it is
      * extended. So this sounds on the miss, as the ball settles.
@@ -474,6 +560,7 @@ var Audio = (function() {
         resume: sealed(resume, 'resume'),
         peg: sealed(peg, 'peg'),
         score: sealed(score, 'score'),
+        colotomy: sealed(colotomy, 'colotomy'),
         wall: sealed(wall, 'wall'),
         floor: sealed(floor, 'floor'),
         gong: sealed(gong, 'gong'),

@@ -908,17 +908,37 @@ Game.prototype.startFateTransit = function(mode) {
 Game.prototype.registerScore = function(crossSpeed, crossU) {
     Capture.finish(true);
 
-    // The line is a string, and it has just been crossed: pluck it where
-    // the ball passed, as hard as it was travelling (hoop.js).
-    const strength = Math.min(1, (crossSpeed || 0) / this.cellRes / CONFIG.AUDIO.FULL_IMPACT);
+    // ONE CROSSING, ONE STRENGTH. The eye and the ear are describing the
+    // same event, so they must read the same number: this single 0..1 is
+    // how hard the string was struck, and both the pluck's amplitude and
+    // the pluck's volume are scaled from it. (They previously normalised
+    // the same speed against different ranges, so a slow drop-through
+    // looked 15 points softer than it sounded - two channels disagreeing
+    // about one fact.) Each still applies its OWN floor afterwards, which
+    // is legitimate: the eye and ear have different useful ranges.
+    const A = CONFIG.AUDIO;
+    const speedCells = (crossSpeed || 0) / this.cellRes;
+    const crossStrength = Math.max(0, Math.min(1,
+        (speedCells - A.STRING_SOFT_SPEED) /
+        Math.max(0.0001, A.STRING_FULL_SPEED - A.STRING_SOFT_SPEED)));
+
     if (this.lines[0] && typeof this.lines[0].pluck === 'function' && isFinite(crossU)) {
-        this.lines[0].pluck(crossU, strength);
+        this.lines[0].pluck(crossU, crossStrength);
     }
     // Sounded at the hoop, where it is decided - pitched by the run so far,
     // so the streak climbs the ladder, and struck at the speed it passed
     // through, in cells so it feels the same on any screen.
-    Audio.score(this.score, (crossSpeed || 0) / this.cellRes);
+    Audio.score(this.score, crossStrength);
     this.score++;
+
+    // ...and the colotomy behind it, marking the run's own cycles. Fired on
+    // the ACHIEVED count (so 'kenong every 4' means the 4th basket), and
+    // end-accented like the tradition: the punctuation marks arrival, not
+    // departure. Gamelan's goal is the gong, not its downbeat.
+    {
+        const C = CONFIG.AUDIO.COLOTOMY;
+        Audio.colotomy(this.score, (C.LAG_MS + Math.random() * C.LAG_JITTER_MS) / 1000);
+    }
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);
 
