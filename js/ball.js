@@ -2,6 +2,19 @@
 'use strict';
 
 class Ball {
+    /**
+     * '#5a5a5a' -> 'rgba(90,90,90,a)'. Cached on the hex, because the ink
+     * only changes when the palette does but this is asked every frame.
+     */
+    static _rgba(hex, a) {
+        if (Ball._rgbaHex !== hex) {
+            Ball._rgbaHex = hex;
+            Ball._rgbaParts = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+        }
+        const p = Ball._rgbaParts;
+        return 'rgba(' + p[0] + ',' + p[1] + ',' + p[2] + ',' + a + ')';
+    }
+
     constructor(gridX, gridY, game) {
         this.game = game;
         this.isStatic = true; // Ball starts static until aimed/shot
@@ -13,10 +26,7 @@ class Ball {
 
         this.velocity = { x: 0, y: 0 }; // Actual velocity used by physics
 
-        // Fading position trail (drawn when CONFIG.RENDER.DRAW_TRAIL)
-        this.trail = [];
         this.sleeping = false; // Flick: resting on the solid floor
-        this.trailLength = CONFIG.GAME.TRAIL_LENGTH;
 
         this.prePixelX = this.pixelX; // Previous-step position: render interpolation
         this.prePixelY = this.pixelY; // ...and the hoop-crossing win check
@@ -36,7 +46,6 @@ class Ball {
         }
         // Note: prePixelY is set in Game.stepSimulation *before* physics.
         this.checkForWin(game); // Check win condition based on movement
-        this.updateTrail();     // Update aesthetic trail
     }
 
     /**
@@ -79,16 +88,6 @@ class Ball {
         }
     }
 
-    /**
-     * Records the current position into the trail and trims it.
-     */
-    updateTrail() {
-        if (this.isStatic) return;
-        this.trail.unshift({ x: this.pixelX, y: this.pixelY });
-        if (this.trail.length > this.trailLength) {
-            this.trail.length = this.trailLength;
-        }
-    }
 
     /**
      * Draws the ball (and its trail if enabled). Called by Renderer.
@@ -96,10 +95,6 @@ class Ball {
      */
     draw(game) {
         const c = game.c;
-
-        if (!this.isStatic && CONFIG.RENDER.DRAW_TRAIL) {
-            this.drawTrail(c, game);
-        }
 
         // Render position: while flying, blend between the previous and
         // current step positions by the frame's progress toward the next
@@ -142,14 +137,57 @@ class Ball {
             // board would be a lie about a journey that never happened.
             if (dist > min && dist < max) {
                 const k = 1 - Math.max(0, Math.min(1, B.SHUTTER));
+                const backX = this.blurPrevX + dx * k;
+                const backY = this.blurPrevY + dy * k;
                 const prevAlpha = c.globalAlpha;
                 const prevCap = c.lineCap;
+
+                // THE TAIL, drawn FIRST so the solid capsule lands on top.
+                //
+                // A wedge running back from the capsule, narrowing and
+                // fading out. ONE path with ONE gradient fill, deliberately
+                // - a stack of semi-transparent segments would double its
+                // own alpha wherever the segments overlapped, and the
+                // banding that produces is exactly the "gradient-y" look
+                // this is supposed to avoid.
+                //
+                // Its length is a MULTIPLE OF THE FRAME'S TRAVEL, so it is
+                // speed that decides it: nothing at rest, a whisper at a
+                // gentle roll, a real streak on a hard throw. LENGTH is the
+                // dial - 0 is none.
+                const T = B.TAIL;
+                if (T && T.LENGTH > 0) {
+                    const ux = dx / dist, uy = dy / dist;   // travel direction
+                    const px = -uy, py = ux;                // and its normal
+                    const len = dist * T.LENGTH;
+                    const tx = backX - ux * len, ty = backY - uy * len;
+                    const r0 = this.radius, r1 = this.radius * T.TAPER;
+                    // Guarded: a gradient is a cosmetic nicety, and no
+                    // cosmetic nicety is allowed to throw inside the render
+                    // path. Without one, the wedge is simply skipped and
+                    // the capsule still draws.
+                    const grad = (typeof c.createLinearGradient === 'function')
+                        ? c.createLinearGradient(backX, backY, tx, ty) : null;
+                    if (grad && typeof grad.addColorStop === 'function') {
+                    grad.addColorStop(0, Ball._rgba(game.themeColors.BALL, T.ALPHA));
+                    grad.addColorStop(1, Ball._rgba(game.themeColors.BALL, 0));
+                    c.fillStyle = grad;
+                    c.beginPath();
+                    c.moveTo(backX + px * r0, backY + py * r0);
+                    c.lineTo(backX - px * r0, backY - py * r0);
+                    c.lineTo(tx - px * r1, ty - py * r1);
+                    c.lineTo(tx + px * r1, ty + py * r1);
+                    c.closePath();
+                    c.fill();
+                    }
+                }
+
                 c.globalAlpha = prevAlpha * B.ALPHA;
                 c.strokeStyle = game.themeColors.BALL;
                 c.lineWidth = this.radius * 2;
                 c.lineCap = 'round';
                 c.beginPath();
-                c.moveTo(this.blurPrevX + dx * k, this.blurPrevY + dy * k);
+                c.moveTo(backX, backY);
                 c.lineTo(drawX, drawY);
                 c.stroke();
                 c.globalAlpha = prevAlpha;
@@ -165,34 +203,6 @@ class Ball {
         c.fill();
     }
 
-    /**
-     * Draws the fading, shrinking position trail.
-     * @param {CanvasRenderingContext2D} c - The canvas rendering context.
-     * @param {Game} game - The main game instance.
-     */
-    drawTrail(c, game) {
-        const trailLen = this.trail.length;
-        if (trailLen === 0) return;
-
-        // PERF: one fillStyle for the whole trail; per-arc opacity via
-        // globalAlpha. The old version built ~30 rgba(...) strings per
-        // frame (allocate + parse each) - identical pixels, none of the
-        // churn.
-        const opacityFactor = 0.1;
-        c.save();
-        c.fillStyle = game.themeColors.BALL;
-
-        for (let i = trailLen - 1; i >= 0; i--) {
-            const t = (trailLen - i) / trailLen; // 1 = newest, ->0 = oldest
-            const trailRadius = Math.max(0, this.radius * t);
-
-            c.globalAlpha = t * opacityFactor;
-            c.beginPath();
-            c.arc(this.trail[i].x, this.trail[i].y, trailRadius, 0, Math.PI * 2, false);
-            c.fill();
-        }
-        c.restore();
-    }
 
     /**
      * Handles updates needed when the game window resizes.
@@ -200,7 +210,6 @@ class Ball {
      */
     resizeUpdate(game) {
         this.radius = game.radius;
-        this.trailLength = CONFIG.GAME.TRAIL_LENGTH;
         // POSITION IS NOT RECOMPUTED HERE. gridX/gridY are where the ball
         // was BORN and are never updated as it moves, so rebuilding pixels
         // from them teleported a static ball back to its spawn on every

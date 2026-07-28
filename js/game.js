@@ -779,7 +779,7 @@ Game.prototype.handleResize = function() {
     // THE BALL IS NOT ON THE GRID. Every other element knows its cell and
     // can simply recompute its pixels below - the ball moves freely, so its
     // position, its previous position (render interpolation), its velocity
-    // (px/step) and its trail are all absolute pixels measured in the OLD
+    // (px/step) are all absolute pixels measured in the OLD
     // cell size. Rescale them all by the same ratio, or the world resizes
     // around a ball that stays put.
     const k = (prevCell > 0) ? this.cellRes / prevCell : 1;
@@ -788,7 +788,6 @@ Game.prototype.handleResize = function() {
             b.pixelX *= k; b.pixelY *= k;
             if (b.prePixelX !== undefined) { b.prePixelX *= k; b.prePixelY *= k; }
             if (b.velocity) { b.velocity.x *= k; b.velocity.y *= k; }
-            if (b.trail) b.trail.forEach(p => { p.x *= k; p.y *= k; });
         });
     }
     // Notify elements that might need to update internal state on resize
@@ -829,7 +828,6 @@ Game.prototype.startAiming = function(startX, startY) {
     this.currentBall.sleeping = false;
     this.currentBall.isStatic = true;
     this.currentBall.velocity = { x: 0, y: 0 };
-    this.currentBall.trail = [];
     this.moveCarriedBall(startX, startY);
 };
 

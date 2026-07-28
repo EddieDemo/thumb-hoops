@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v71',
+    VERSION: 'v72',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -464,7 +464,6 @@ var CONFIG = {
                                      // (seeded shuffle; nearest to target wins)
         },
 
-        TRAIL_LENGTH: 30,
         RESET_DELAY_SECONDS: 0.5 // Delay after ball hits floor before reset
     },
 
@@ -603,7 +602,8 @@ var CONFIG = {
         // light / 1.34:1 dark, solved live against the current colour).
         // MOTION BLUR (see ball.js). The ball's swept region, drawn as a
         // capsule - solid, not a ghost. This is a SECOND, subtler layer
-        // than DRAW_TRAIL: the trail says where the ball has been, this
+        // than the retired position trail: that said where the ball had
+        // been, this says the ball itself is moving too fast to have a
         // says the ball itself is moving too fast to be a hard edge.
         BLUR: {
             ENABLED: true,
@@ -614,7 +614,17 @@ var CONFIG = {
             ALPHA: 1.0,           // full opacity: the ball smears, it does
                                   // not ghost. Lower it for a softer read.
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
-            MAX_TRAVEL_CELLS: 1.50  // above this something teleported
+            MAX_TRAVEL_CELLS: 1.50, // above this something teleported
+
+            // THE TAIL: a wedge running back from the capsule, narrowing
+            // and fading. Length is a MULTIPLE OF THE FRAME'S TRAVEL, so
+            // speed decides it - nothing at rest, a whisper at a roll, a
+            // real streak on a hard throw.
+            TAIL: {
+                LENGTH: 1.2,   // <- THE DIAL. 0 = none, 3 = lots
+                TAPER: 0.30,   // tail-end width, as a fraction of the ball
+                ALPHA: 0.30    // where it meets the capsule; fades to 0
+            }
         },
 
         // The checkerboard. OFF gives a plain field in the theme's own
@@ -652,17 +662,6 @@ var CONFIG = {
         // imperceptible, and the simulation itself is never affected.
         INTERPOLATE: true,
 
-        // THE FADING TRAIL: a line of shrinking, dimming ghosts marking
-        // where the ball has been. Superseded by BLUR above, which says
-        // something different - the trail is HISTORY, the blur is the ball
-        // itself moving too fast to have a hard edge. Both at once read as
-        // two ideas about the same object.
-        //
-        // OFF, but fully intact: drawTrail() and the trail buffer are
-        // untouched, and the positions keep being recorded, so flipping
-        // this back shows a complete trail on the very next frame rather
-        // than one that has to fill up first.
-        DRAW_TRAIL: false,
 
         // --- Daily record separator: summit SEP2 cost, e.g. "14-9" ---
         // Pure typography - try '/' '\u00b7' etc on glass.
