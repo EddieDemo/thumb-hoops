@@ -224,70 +224,50 @@ Game.prototype.redefineVariables = function() {
  * Initializes or fully restarts the game.
  */
 Game.prototype.start = function() {
-    {
-        // The intro: an empty world, a ball falling into it. The court
-        // rises when the ball first lands (onFloorContact). The lattice
-        // itself (cells - placement geometry AND the visible grid) is
-        // built now; only the hoop waits for the landing.
-        this.redefineVariables();
-        this.elements = []; this.cells = []; this.nodes = [];
-        this.lines = []; this.balls = [];
-        for (let i = 0; i < this.COLUMNS; i++) {
-            for (let j = 0; j < this.ROWS; j++) {
-                const cell = new Cell(i, j, this);
-                this.cells.push(cell); this.elements.push(cell);
-            }
-        }
-        this.spawnDropBall();
-        this.transitionTo(GameStates.SHOT_TAKEN); // Physics runs; can't aim yet
-        this.lastTime = performance.now(); // Without this, frame 1's delta
-        // is the whole time since navigation - a fast-forwarded intro.
-        // NOTE: no requestAnimationFrame here - core.js starts THE loop
-        // (single owner). A second chain here ran the game at exactly 2x:
-        // duplicate same-frame calls have delta 0, and the fallback clamp
-        // below minted each one a full 1/60s of phantom time.
-        return;
-    }
     dbg("Starting game...");
 
-    // Ensure any pending reset timer is cleared immediately
+    // A pending reset timer from a previous run must not fire into this one.
     if (this.resetTimerId) {
         clearTimeout(this.resetTimerId);
         this.resetTimerId = null;
-        dbg("Cleared pending reset timer on game start.");
     }
 
-    // Reset core game state variables
-    // Interruptibility ("queue test"): start() runs once per page load, so
-    // restoring here means closing the tab mid-streak and reopening resumes
-    // it - the game un-pauses rather than punishing the interruption.
+    // THE THEME, and THE RUN, both restored before anything is drawn.
+    // (Both of these used to live below an unconditional `return` left
+    // behind when the drag scheme was removed - so neither ran: a saved
+    // streak was written faithfully and never read back, and a dark-mode
+    // preference survived until exactly the moment you reloaded.)
+    applyTheme(this);
+
+    // Interruptibility (the "queue test"): start() runs once per page load,
+    // so restoring here means closing the tab mid-streak and reopening
+    // resumes it - the game un-pauses rather than punishing the interruption.
     this.score = Persistence.load('streak', 0);
     Palette.restore(this.score); // Run colour resumes with the run
     this.hasScored = false;
-    this.currentBall = null;
-    this.lastTime = performance.now();
     this.deltaTime = 0;
 
-    // Initialize state machine
-    this.currentState = GameStates.READY_TO_AIM;
-
-    // Apply theme and calculate sizes
-    applyTheme(this);
+    // The intro: an empty world, a ball falling into it. The court rises
+    // when the ball first lands (onFloorContact). The lattice itself
+    // (cells - placement geometry AND the visible grid) is built now; only
+    // the hoop waits for the landing.
     this.redefineVariables();
-
-    // Clear and recreate grid elements
     this.elements = []; this.cells = []; this.nodes = [];
     this.lines = []; this.balls = [];
     for (let i = 0; i < this.COLUMNS; i++) {
-         for (let j = 0; j < this.ROWS; j++) {
+        for (let j = 0; j < this.ROWS; j++) {
             const cell = new Cell(i, j, this);
             this.cells.push(cell); this.elements.push(cell);
-         }
+        }
     }
-
-    // Setup the first hoop
-    this.startHoopCycle();
-    dbg("Game started.");
+    this.spawnDropBall();
+    this.transitionTo(GameStates.SHOT_TAKEN); // Physics runs; can't aim yet
+    this.lastTime = performance.now(); // Without this, frame 1's delta is
+    // the whole time since navigation - a fast-forwarded intro.
+    // NOTE: no requestAnimationFrame here - core.js starts THE loop (single
+    // owner). A second chain here ran the game at exactly 2x: duplicate
+    // same-frame calls have delta 0, and the fallback clamp minted each one
+    // a full 1/60s of phantom time.
 };
 
 /**
@@ -779,7 +759,24 @@ Game.prototype.startHoopCycle = function() {
  */
 Game.prototype.handleResize = function() {
     dbg("Resizing window...");
+    const prevCell = this.cellRes;
     this.redefineVariables(); // Recalculate sizes
+
+    // THE BALL IS NOT ON THE GRID. Every other element knows its cell and
+    // can simply recompute its pixels below - the ball moves freely, so its
+    // position, its previous position (render interpolation), its velocity
+    // (px/step) and its trail are all absolute pixels measured in the OLD
+    // cell size. Rescale them all by the same ratio, or the world resizes
+    // around a ball that stays put.
+    const k = (prevCell > 0) ? this.cellRes / prevCell : 1;
+    if (k !== 1) {
+        this.balls.forEach(b => {
+            b.pixelX *= k; b.pixelY *= k;
+            if (b.prePixelX !== undefined) { b.prePixelX *= k; b.prePixelY *= k; }
+            if (b.velocity) { b.velocity.x *= k; b.velocity.y *= k; }
+            if (b.trail) b.trail.forEach(p => { p.x *= k; p.y *= k; });
+        });
+    }
     // Notify elements that might need to update internal state on resize
     this.elements.forEach(element => {
         if (typeof element.resizeUpdate === 'function') { element.resizeUpdate(this); }

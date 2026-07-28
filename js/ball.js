@@ -151,12 +151,13 @@ class Ball {
     resizeUpdate(game) {
         this.radius = game.radius;
         this.trailLength = CONFIG.GAME.TRAIL_LENGTH;
-        if (this.isStatic) {
-             // Recalculate pixel position based on grid if static
-             this.pixelX = this.gridX * game.cellRes;
-             this.pixelY = this.gridY * game.cellRes;
-        }
-        // Clear trail on resize
-        this.trail = [];
+        // POSITION IS NOT RECOMPUTED HERE. gridX/gridY are where the ball
+        // was BORN and are never updated as it moves, so rebuilding pixels
+        // from them teleported a static ball back to its spawn on every
+        // resize - which, for the intro ball, is above the ceiling. The
+        // ball lives in absolute pixels; Game.handleResize rescales those
+        // (and the previous position, the velocity and the trail) by the
+        // cell-size ratio, which is correct in every state: held, flying,
+        // rolling or asleep.
     }
 } // End of Ball class
