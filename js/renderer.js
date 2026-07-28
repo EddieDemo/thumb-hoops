@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -117,7 +117,8 @@ Renderer.prototype.drawFrame = function() {
     this.drawScore(game);
     this.drawBestStreak(game);
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
-    this.drawVersionTag(game);   // Deploy verification, bottom-left cell
+    this.drawVersionTag(game);
+    this.drawSeedTag(game);   // Deploy verification, bottom-left cell
 
     // Layer 4: frame and shoot line
     if (CONFIG.RENDER.DRAW_BOUNDARY) this.drawCanvasBoundary(game);
@@ -266,10 +267,32 @@ Renderer.prototype.drawGhostBall = function(game) {
 Renderer.prototype.drawVersionTag = function(game) {
     const cached = this.getCachedText('version', CONFIG.VERSION, CONFIG.RENDER.WEIGHT_WATERMARK,
         game.cellRes * 0.25, game.themeColors.SCORE);
-    const centerX = 0.5 * game.cellRes;
+    const leftX = CONFIG.RENDER.TAG_MARGIN_CELLS * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
-        centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+        leftX, centerY - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * THE COURT'S NAME, bottom-right - the version tag's mirror, in the same
+ * whisper: same row, same size, same weight, same faint register, one cell
+ * in from its own wall. Two marks that say what you are looking at and what
+ * is drawing it.
+ *
+ * RIGHT-ALIGNED, not centred on the cell: the seed is a date and grows
+ * longer than 'v63', so anchoring its right edge keeps the margin constant
+ * while the text changes. A custom court (?seed=) shows its own name, which
+ * is exactly when knowing it matters most - and is the only way to read
+ * back a seed someone shared with you.
+ */
+Renderer.prototype.drawSeedTag = function(game) {
+    if (!CONFIG.RENDER.SHOW_SEED_TAG) return;
+    const cached = this.getCachedText('seed', game.courtSeed, CONFIG.RENDER.WEIGHT_WATERMARK,
+        game.cellRes * 0.25, game.themeColors.SCORE);
+    const rightX = (game.COLUMNS - CONFIG.RENDER.TAG_MARGIN_CELLS) * game.cellRes;
+    const centerY = (game.ROWS - 0.5) * game.cellRes;
+    this.c.drawImage(cached.canvas,
+        rightX - cached.w, centerY - cached.h / 2, cached.w, cached.h);
 };
 
 /**

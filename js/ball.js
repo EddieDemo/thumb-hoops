@@ -69,7 +69,11 @@ class Ball {
                 // exactly as every collision answers its own impact.
                 const speed = Math.sqrt(this.velocity.x * this.velocity.x +
                                         this.velocity.y * this.velocity.y);
-                game.registerScore(speed); // Game owns all scoring bookkeeping
+                // WHERE it crossed, normalised between the posts - the point
+                // the string is plucked at (hoop.js).
+                const u = (this.pixelX - nLeft.pixelX) /
+                          Math.max(1, nRight.pixelX - nLeft.pixelX);
+                game.registerScore(speed, u); // Game owns all scoring bookkeeping
                 // Reset transition will be triggered by floor hit
             }
         }

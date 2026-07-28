@@ -11,54 +11,127 @@ class Hoop {
         // Presentation birth time. The line's draw-in is internally delayed
         // (LINE_DELAY_MS) so the pegs pop first - anchors, then string.
         this.spawnTime = game.worldTime;
+
+        // The pluck: { t0, u, amp } while ringing, else null. See pluck().
+        this.plucked = null;
     }
 
     /**
-     * The line is STRUNG between the pegs, so it animates by length:
-     *  - Entry: after the pegs' pop, it draws itself left peg -> right peg.
-     *  - Exit: driven by the same element-exit signal as the pegs, it
-     *    retracts symmetrically into them - two halves pulling home, the
-     *    whole hoop dying as one object.
+     * THE PLUCK. The ball has passed through, and the line behaves like the
+     * string it sounds like.
+     *
+     * A string fixed at both ends and pulled aside at position u starts as a
+     * TRIANGLE peaking at u. Released, that shape decomposes into standing
+     * modes whose amplitudes go as sin(n*pi*u) / n^2 - so the fundamental
+     * (a single arc, antinode at the CENTRE) is much the largest term, and
+     * every higher mode is both smaller and damped harder. The visible
+     * consequence is the thing that makes this worth doing: the bulge
+     * begins where the ball crossed and MIGRATES to the middle as the
+     * overtones die. Pluck dead centre and the even modes vanish exactly
+     * (sin(n*pi/2) = 0), which is the same reason a guitar sounds rounder
+     * plucked over the 12th fret.
+     *
+     * The one deliberate lie is TIME. A real string runs at audio rates and
+     * reads as a blur; this runs at a few hertz so the eye can follow the
+     * modes resolving. Physically structured, visually timed.
+     *
+     * @param {number} u        where along the line, 0..1
+     * @param {number} strength 0..1, from the speed it was crossed at
+     */
+    pluck(u, strength) {
+        const P = CONFIG.MOTION.PLUCK;
+        if (!P || !P.ENABLED) return;
+        // The series divides by u(1-u): a pluck exactly on a peg is not a
+        // pluck, so hold it just inside the anchors.
+        const uu = Math.max(P.EDGE_CLAMP, Math.min(1 - P.EDGE_CLAMP, u));
+        this.plucked = {
+            t0: this.game.worldTime,
+            u: uu,
+            amp: P.AMPLITUDE_CELLS * this.game.cellRes *
+                 (P.MIN_STRENGTH + (1 - P.MIN_STRENGTH) * Math.max(0, Math.min(1, strength)))
+        };
+    }
+
+    /** Displacement of the string at normalised x, seconds after the pluck. */
+    _plucked_y(x, t) {
+        const P = CONFIG.MOTION.PLUCK;
+        const u = this.plucked.u;
+        const w1 = 2 * Math.PI * P.FUNDAMENTAL_HZ;
+        let y = 0;
+        for (let n = 1; n <= P.MODES; n++) {
+            // Fourier coefficient of a triangular pluck at u.
+            const B = 2 * Math.sin(n * Math.PI * u) /
+                      (n * n * Math.PI * Math.PI * u * (1 - u));
+            y += B * Math.sin(n * Math.PI * x) *
+                 Math.cos(n * w1 * t) *
+                 Math.exp(-t * Math.pow(n, P.DAMP_EXP) / P.DECAY_S);
+        }
+        return y * this.plucked.amp;
+    }
+
+    /**
+     * The line FADES. It is drawn at its true, full length from the moment
+     * it exists, and only its opacity moves:
+     *  - Entry: after the pegs' pop, it fades up between them.
+     *  - Exit: driven by the same element-exit signal as the pegs, it fades
+     *    away with them - the whole hoop dying as one object.
+     *
+     * It used to animate by LENGTH, growing out of its pegs and retracting
+     * home. That looked good and said something false: this line IS the
+     * scoring boundary, and the boundary is full-width the instant the
+     * round begins. A line still growing toward its peg draws a shorter
+     * hoop than the one the ball is actually being judged against. Opacity
+     * can say "arriving" without misstating where the edges are.
      */
     draw(game) {
         const c = game.c;
         const M = CONFIG.MOTION;
         const x1 = this.node1.pixelX, x2 = this.node2.pixelX;
         const y = this.node1.pixelY;
-        const exit = game.getElementExitT();
 
-        const segments = [];
+        const exit = game.getElementExitT();
+        let presence;
         if (exit > 0) {
-            const half = (x2 - x1) / 2;
-            const keep = half * (1 - exit);
-            if (keep > 0.5) {
-                segments.push([x1, x1 + keep]);       // Left half, retracting home
-                segments.push([x2 - keep, x2]);       // Right half, retracting home
-            }
+            presence = 1 - exit;                       // fading out with the pegs
         } else {
             const age = game.worldTime - this.spawnTime;
-            const e = Motion.easeOutCubic(
+            presence = Motion.easeOutCubic(
                 Motion.progress(age, M.LINE_DELAY_MS / 1000, M.LINE_DRAW_MS / 1000));
-            if (e > 0.001) {
-                // Mirror of the exit: two halves grow OUT of their pegs and
-                // meet in the middle - the string emerges from its anchors.
-                const half = (x2 - x1) / 2;
-                const grow = half * e;
-                segments.push([x1, x1 + grow]);       // Left half, growing out
-                segments.push([x2 - grow, x2]);       // Right half, growing out
-            }
+        }
+        if (presence <= 0.001) { this.pixelY = this.node1.pixelY; return; }
+
+        const prevAlpha = c.globalAlpha;
+        c.globalAlpha = prevAlpha * presence;
+        c.beginPath();
+        c.strokeStyle = game.themeColors.HOOP;
+        c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+
+        const P = CONFIG.MOTION.PLUCK;
+        let ringing = false;
+        if (this.plucked) {
+            const t = game.worldTime - this.plucked.t0;
+            if (t >= 0 && t < P.DECAY_S * P.LIFETIME_MULT) ringing = true;
+            else this.plucked = null;   // rung out; back to a plain line
         }
 
-        if (segments.length > 0) {
-            c.beginPath();
-            c.strokeStyle = game.themeColors.HOOP;
-            c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
-            for (const seg of segments) {
-                c.moveTo(seg[0], y);
-                c.lineTo(seg[1], y);
+        if (ringing) {
+            // Sampled as a polyline. The ends are pinned: a string fixed at
+            // both anchors, which is exactly what the pegs are.
+            const t = game.worldTime - this.plucked.t0;
+            const span = x2 - x1;
+            const N = P.SAMPLES;
+            c.moveTo(x1, y);
+            for (let i = 1; i <= N; i++) {
+                const s = i / N;
+                c.lineTo(x1 + span * s, y + this._plucked_y(s, t));
             }
-            c.stroke();
+        } else {
+            c.moveTo(x1, y);
+            c.lineTo(x2, y);
         }
+
+        c.stroke();
+        c.globalAlpha = prevAlpha;
 
         this.pixelY = this.node1.pixelY; // Update cached Y
     }

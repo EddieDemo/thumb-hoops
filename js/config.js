@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v62',
+    VERSION: 'v65',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -132,6 +132,25 @@ var CONFIG = {
     },
 
     MOTION: {
+
+        // THE PLUCK (see hoop.js). The hoop line behaves like the string it
+        // sounds like: displaced where the ball crossed, then ringing down
+        // through its standing modes. Physically structured, visually timed
+        // - a real string runs at audio rates and reads as a blur.
+        PLUCK: {
+            ENABLED: true,
+            AMPLITUDE_CELLS: 0.16,  // peak displacement at full strength
+            MIN_STRENGTH: 0.45,     // even a slow drop-through plucks a little
+            FUNDAMENTAL_HZ: 9,      // visual, not audible: ~4 swings before it dies
+            MODES: 6,               // beyond this the 1/n^2 terms are invisible
+            DAMP_EXP: 2,            // higher modes die as n^this - which is what
+                                    // migrates the bulge to the centre
+            DECAY_S: 0.40,
+            LIFETIME_MULT: 2.2,     // stop drawing the polyline after this
+            SAMPLES: 28,
+            EDGE_CLAMP: 0.06        // a pluck on a peg is not a pluck
+        },
+
         // Element entry: the two rim pegs POP (easeOutBack overshoot), the
         // second a beat after the first, then the hoop line draws itself
         // between them - anchors first, then string.
@@ -535,6 +554,15 @@ var CONFIG = {
         // trial of eight candidates; the cycler that ran that trial is
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
+        // The court's name, bottom-right - the version tag's mirror.
+        SHOW_SEED_TAG: true,
+        // Both bottom tags are anchored by their OUTER edge, one shared
+        // margin from their own wall. Centring each on a cell instead would
+        // make the visible margin depend on the text's own width, so 'v63'
+        // and a ten-character date would sit at different insets - which is
+        // exactly what a mirror must not do.
+        TAG_MARGIN_CELLS: 0.24,
+
         FONT_FAMILY: "'Geist Mono', ui-monospace, monospace",
 
         // Weights for the smaller text. These ARE small, so they keep some

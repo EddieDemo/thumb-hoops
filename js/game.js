@@ -905,8 +905,15 @@ Game.prototype.startFateTransit = function(mode) {
  * Ball detects the crossing, but scoring bookkeeping (streak, best, and
  * persistence) is the Game's concern.
  */
-Game.prototype.registerScore = function(crossSpeed) {
+Game.prototype.registerScore = function(crossSpeed, crossU) {
     Capture.finish(true);
+
+    // The line is a string, and it has just been crossed: pluck it where
+    // the ball passed, as hard as it was travelling (hoop.js).
+    const strength = Math.min(1, (crossSpeed || 0) / this.cellRes / CONFIG.AUDIO.FULL_IMPACT);
+    if (this.lines[0] && typeof this.lines[0].pluck === 'function' && isFinite(crossU)) {
+        this.lines[0].pluck(crossU, strength);
+    }
     // Sounded at the hoop, where it is decided - pitched by the run so far,
     // so the streak climbs the ladder, and struck at the speed it passed
     // through, in cells so it feels the same on any screen.
