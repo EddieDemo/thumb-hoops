@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v67',
+    VERSION: 'v70',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -381,6 +381,21 @@ var CONFIG = {
                                    // wall banks in the time it takes to fall
         VY_MAX_CELLS: 0.12         // a little downward push, so arrivals
                                    // differ in pace as well as in path
+    },
+
+    // --- THE SOCIAL LAYER (see js/share.js) ---
+    // One block of copyable text and no server, which is Wordle's model and
+    // this game's constraint. The glyphs must be things every phone and
+    // desktop already renders - no custom font, no image.
+    SHARE: {
+        TITLE: 'Thumb-Hoops',
+        MADE: '\u25cf',      // filled circle - a basket
+        MISSED: '\u25cb',    // hollow circle - a miss
+        TRIM_MARK: '\u2026', // ellipsis, when a long day is trimmed
+        MAX_GLYPHS: 40,      // beyond this the front is dropped: the ENDING
+                             // is the part that matters, and a chat message
+                             // should stay one screen
+        SHOW_GLYPH: true     // the tap affordance, top-left
     },
 
     GAME: {

@@ -244,6 +244,19 @@ InputHandler.prototype.handlePointerDown = function(event) {
     }
 
 
+    // SHARE: a tap in the top-LEFT corner copies the day. Same visible-top
+    // anchoring as every other screen-fixed region, and a no-op when there
+    // is nothing to share - so it can never swallow a tap for nothing.
+    if (CONFIG.SHARE.SHOW_GLYPH && typeof Share !== 'undefined' &&
+        Share.hasResult(this.game) &&
+        pos.x < this.game.cellRes * 1.4 &&
+        pos.y > this.game.viewTopY &&
+        pos.y < this.game.viewTopY + this.game.cellRes * 1.4) {
+        dbg('InputHandler: Share tapped.');
+        Share.shareDaily(this.game);
+        return;
+    }
+
     // Theme toggle (product feature): a tap in the top-right glyph region
     // flips light/dark - same action as the T key, persisted.
     // The region hangs from the VISIBLE top, exactly like the glyph does.

@@ -92,7 +92,11 @@ function Game() {
     const storedDaily = Persistence.load('dailyRecord', null);
     this.daily = (storedDaily && storedDaily.seed === this.courtSeed)
         ? storedDaily
-        : { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0 };
+        : { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0, seq: [], seqAtBest: [] };
+    // Older saved days predate the shape - give them empty arrays rather
+    // than letting the share builder meet undefined.
+    if (!Array.isArray(this.daily.seq)) this.daily.seq = [];
+    if (!Array.isArray(this.daily.seqAtBest)) this.daily.seqAtBest = [];
     dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - exhibition)' : ' (daily)'));
     // Detached one-shot effects (see effects.js) - may outlive the round
     // that spawned them. Updated/pruned in animate, drawn by the renderer.
@@ -696,6 +700,7 @@ Game.prototype.initiateLevelResetLogic = function() {
         Capture.finish(false);
         if (!this.isCustomCourt) {
             this.daily.misses++;
+            this.daily.seq.push(0); // the day's shape: a hollow circle
             Persistence.save('dailyRecord', this.daily);
         }
         this.resetStreak(); // Miss: the streak ends (and is persisted as ended)
@@ -930,6 +935,7 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
     // through, in cells so it feels the same on any screen.
     Audio.score(this.score, crossStrength);
     this.score++;
+    if (!this.isCustomCourt) this.daily.seq.push(1); // ...and a filled one
 
     // ...and the colotomy behind it, marking the run's own cycles. Fired on
     // the ACHIEVED count (so 'kenong every 4' means the 4th basket), and
@@ -957,6 +963,10 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
     if (!this.isCustomCourt && this.score > this.daily.best) {
         this.daily.best = this.score;
         this.daily.missesAtBest = this.daily.misses;
+        // Snapshot the shape alongside the cost. The share shows the day
+        // only up to HERE, so that playing on can never make it look worse
+        // - the same rule the numbers already obey.
+        this.daily.seqAtBest = this.daily.seq.slice();
         Persistence.save('dailyRecord', this.daily);
     }
     dbg('Game: Score registered. Streak:', this.score, 'Best:', this.bestStreak);

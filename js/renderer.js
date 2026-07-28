@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' }, share: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -116,6 +116,7 @@ Renderer.prototype.drawFrame = function() {
     // Layer 3: the environment layer - score and BEST sit BEHIND the world
     this.drawScore(game);
     this.drawBestStreak(game);
+    this.drawShareGlyph(game);   // Share the day, top-left
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);
     this.drawSeedTag(game);   // Deploy verification, bottom-left cell
@@ -456,6 +457,24 @@ Renderer.prototype.drawBestStreak = function(game) {
     const centerY = (boundaryY + game.ROWS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * THE SHARE GLYPH, top-left - the mirror of the theme toggle, in the
+ * corner the retired scheme label and font cycler used to occupy.
+ *
+ * Hidden until there is a result: a first-time player sees nothing to
+ * explain, exactly like the record label. Hidden on custom courts too,
+ * because exhibition play keeps no ledger and so has nothing to share.
+ */
+Renderer.prototype.drawShareGlyph = function(game) {
+    if (!CONFIG.SHARE.SHOW_GLYPH) return;
+    if (typeof Share === 'undefined' || !Share.hasResult(game)) return;
+    const cached = this.getCachedText('share', '\u2197', CONFIG.RENDER.WEIGHT_LABEL,
+        game.cellRes * 0.5, game.themeColors.BEST);
+    const cx = 0.5 * game.cellRes;
+    const cy = game.viewTopY + 0.5 * game.cellRes;
+    this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
 };
 
 /**
