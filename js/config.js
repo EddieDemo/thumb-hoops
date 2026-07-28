@@ -472,6 +472,16 @@ var CONFIG = {
 
             SIZE_CELLS: 4,   // Cap height in cells (was 2)
 
+            // WEIGHT. Was 700 - but weight exists to compensate for SMALL
+            // size, and this numeral is the largest thing on screen. Bold
+            // at four cells reads as heavy rather than emphatic, and the
+            // thicker the strokes the more it competes with the ink layer
+            // it is supposed to sit behind. (Note the font trial never
+            // actually showed bold Geist: that build served weight 400
+            // only, so every '700' was a browser-synthesised fake.)
+            // Available cuts: 400, 500, 600, 700.
+            WEIGHT: '400',
+
             // Transparency is a REQUEST, not a colour. The numeral's
             // on-screen appearance is still solved to the theme's SCORE
             // contrast target (as every other element is), and the base
@@ -526,6 +536,12 @@ var CONFIG = {
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
         FONT_FAMILY: "'Geist Mono', ui-monospace, monospace",
+
+        // Weights for the smaller text. These ARE small, so they keep some
+        // weight: the record label and theme glyph at 600, the version
+        // watermark at 400 (it is a whisper, not a label).
+        WEIGHT_LABEL: '600',
+        WEIGHT_WATERMARK: '400',
         // Blend the ball's rendered position between physics steps so motion
         // is smooth on displays faster than STEP_HZ (90/120/144Hz phones).
         // Rendering runs a fraction of one step behind the simulation -

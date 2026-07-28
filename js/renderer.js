@@ -30,8 +30,9 @@ function Renderer(game) {
             dbg('Renderer: webfont available - text caches invalidated.');
         };
         Promise.all([
-            document.fonts.load("700 16px " + CONFIG.RENDER.FONT_FAMILY),
-            document.fonts.load("600 16px " + CONFIG.RENDER.FONT_FAMILY)
+            document.fonts.load(CONFIG.RENDER.SCORE_NUMERAL.WEIGHT + " 16px " + CONFIG.RENDER.FONT_FAMILY),
+            document.fonts.load(CONFIG.RENDER.WEIGHT_LABEL + " 16px " + CONFIG.RENDER.FONT_FAMILY),
+            document.fonts.load(CONFIG.RENDER.WEIGHT_WATERMARK + " 16px " + CONFIG.RENDER.FONT_FAMILY)
         ]).then(invalidate).catch(() => { /* offline: fallback face stands */ });
         if (document.fonts.ready) document.fonts.ready.then(invalidate);
     }
@@ -263,7 +264,7 @@ Renderer.prototype.drawGhostBall = function(game) {
  * recognisable at a glance when testing on device.
  */
 Renderer.prototype.drawVersionTag = function(game) {
-    const cached = this.getCachedText('version', CONFIG.VERSION, '700',
+    const cached = this.getCachedText('version', CONFIG.VERSION, CONFIG.RENDER.WEIGHT_WATERMARK,
         game.cellRes * 0.25, game.themeColors.SCORE);
     const centerX = 0.5 * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
@@ -288,7 +289,7 @@ Renderer.prototype.drawThemeToggle = function(game) {
     // Destination, not state: dark court -> sun (tap for light),
     // light court -> moon (tap for dark).
     const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u2739' : '\u23FE';
-    const cached = this.getCachedText('mode', glyph, '600',
+    const cached = this.getCachedText('mode', glyph, CONFIG.RENDER.WEIGHT_LABEL,
         game.cellRes * 0.5, game.themeColors.BEST);
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
     // lattice, not to a floating margin.
@@ -349,7 +350,8 @@ Renderer.prototype.drawScore = function(game) {
     // checkerboard shows through.
     const solved = this.solveTransparent(game.themeColors.BACKGROUND,
         game.themeColors.SCORE, (N0 && N0.ALPHA !== undefined) ? N0.ALPHA : 1);
-    const cached = this.getCachedText('score', String(level), '700',
+    const cached = this.getCachedText('score', String(level),
+        (N0 && N0.WEIGHT) || '400',
         game.cellRes * ((N0 && N0.SIZE_CELLS) || 2), solved.color);
     // Centred in the PLAY AREA as seen: from the visible top down to the
     // shoot boundary. (Not the world's midpoint - that sat below centre
@@ -421,7 +423,7 @@ Renderer.prototype.drawBestStreak = function(game) {
     // keeps the record honest against the attempting-basis numeral: after
     // one basket the centre reads 2, the record reads 1-0.
     const label = game.daily.best + CONFIG.RENDER.RECORD_SEP2 + game.daily.missesAtBest;
-    const cached = this.getCachedText('best', label, '600',
+    const cached = this.getCachedText('best', label, CONFIG.RENDER.WEIGHT_LABEL,
         game.cellRes * 0.5, game.themeColors.BEST);
     // Centred in the SHOOT AREA - the day's record belongs to the player's
     // own territory, not to the sky. Environment layer, so the resting
