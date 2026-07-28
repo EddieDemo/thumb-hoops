@@ -113,6 +113,52 @@ class Ball {
             drawY = this.prePixelY + (this.pixelY - this.prePixelY) * a;
         }
 
+        // MOTION BLUR - the swept region, not more ghosts.
+        //
+        // A circle travelling in a straight line sweeps a CAPSULE, and a
+        // capsule is exactly what a stack of full-opacity copies converges
+        // to. So draw the swept shape itself: a round-capped thick line
+        // from where the ball was drawn last frame to where it is now. One
+        // path, geometrically exact, and it scales with speed for free -
+        // at rest the capsule is the circle, at speed it is a smear.
+        //
+        // SHUTTER is borrowed from cameras and is what keeps it subtle: a
+        // real shutter is open for only part of each frame, so the blur
+        // covers a fraction of the travel rather than all of it. It trails
+        // BEHIND the ball, because the ball is at its position and the
+        // smear is where it has just been.
+        //
+        // Measured against the LAST DRAWN position, not the last physics
+        // step, so it describes one displayed frame - correct at 60Hz and
+        // still correct at 120.
+        const B = CONFIG.RENDER.BLUR;
+        if (B && B.ENABLED && !this.isStatic && this.blurPrevX !== undefined) {
+            const dx = drawX - this.blurPrevX, dy = drawY - this.blurPrevY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const min = B.MIN_TRAVEL_CELLS * game.cellRes;
+            const max = B.MAX_TRAVEL_CELLS * game.cellRes;
+            // Below MIN there is nothing to smear; above MAX something
+            // teleported (a resize, a respawn) and a streak across the
+            // board would be a lie about a journey that never happened.
+            if (dist > min && dist < max) {
+                const k = 1 - Math.max(0, Math.min(1, B.SHUTTER));
+                const prevAlpha = c.globalAlpha;
+                const prevCap = c.lineCap;
+                c.globalAlpha = prevAlpha * B.ALPHA;
+                c.strokeStyle = game.themeColors.BALL;
+                c.lineWidth = this.radius * 2;
+                c.lineCap = 'round';
+                c.beginPath();
+                c.moveTo(this.blurPrevX + dx * k, this.blurPrevY + dy * k);
+                c.lineTo(drawX, drawY);
+                c.stroke();
+                c.globalAlpha = prevAlpha;
+                c.lineCap = prevCap;
+            }
+        }
+        this.blurPrevX = drawX;
+        this.blurPrevY = drawY;
+
         c.beginPath();
         c.arc(drawX, drawY, this.radius, 0, Math.PI * 2, false);
         c.fillStyle = game.themeColors.BALL;

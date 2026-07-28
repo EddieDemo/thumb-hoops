@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v70',
+    VERSION: 'v71',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -601,6 +601,22 @@ var CONFIG = {
         // measured in, made legible so players can calibrate aim and power
         // against it. Whisper-subtle by design (CELL2 contrast ~1.06:1
         // light / 1.34:1 dark, solved live against the current colour).
+        // MOTION BLUR (see ball.js). The ball's swept region, drawn as a
+        // capsule - solid, not a ghost. This is a SECOND, subtler layer
+        // than DRAW_TRAIL: the trail says where the ball has been, this
+        // says the ball itself is moving too fast to be a hard edge.
+        BLUR: {
+            ENABLED: true,
+            // Shutter angle, as a camera would mean it: the fraction of a
+            // frame's travel that smears. 1.0 is a fully open shutter (film
+            // standard is 0.5); lower is crisper. THIS is the subtlety dial.
+            SHUTTER: 0.6,
+            ALPHA: 1.0,           // full opacity: the ball smears, it does
+                                  // not ghost. Lower it for a softer read.
+            MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
+            MAX_TRAVEL_CELLS: 1.50  // above this something teleported
+        },
+
         // The checkerboard. OFF gives a plain field in the theme's own
         // background colour - the court and the surround beyond it both
         // fall back together, so the world stays seamless either way.
@@ -636,9 +652,17 @@ var CONFIG = {
         // imperceptible, and the simulation itself is never affected.
         INTERPOLATE: true,
 
-        // DEBUG OVERRIDE: force the full prediction path on every shot,
-        // ignoring the teaching wean. For development/tuning only.
-        DRAW_TRAIL: true,           // Toggle for the ball's fading trail
+        // THE FADING TRAIL: a line of shrinking, dimming ghosts marking
+        // where the ball has been. Superseded by BLUR above, which says
+        // something different - the trail is HISTORY, the blur is the ball
+        // itself moving too fast to have a hard edge. Both at once read as
+        // two ideas about the same object.
+        //
+        // OFF, but fully intact: drawTrail() and the trail buffer are
+        // untouched, and the positions keep being recorded, so flipping
+        // this back shows a complete trail on the very next frame rather
+        // than one that has to fill up first.
+        DRAW_TRAIL: false,
 
         // --- Daily record separator: summit SEP2 cost, e.g. "14-9" ---
         // Pure typography - try '/' '\u00b7' etc on glass.
