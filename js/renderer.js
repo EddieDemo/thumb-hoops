@@ -116,6 +116,7 @@ Renderer.prototype.drawFrame = function() {
     // Layer 3: the environment layer - score and BEST sit BEHIND the world
     this.drawScore(game);
     this.drawBestStreak(game);
+    this.drawWallTicks(game);    // The wall's ladder, made visible
     this.drawShareGlyph(game);   // Share the day, top-left
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);
@@ -457,6 +458,34 @@ Renderer.prototype.drawBestStreak = function(game) {
     const centerY = (boundaryY + game.ROWS * game.cellRes) / 2;
     this.c.drawImage(cached.canvas,
         centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+};
+
+/**
+ * THE WALL TICKS: a short mark at every cell boundary on both walls, in
+ * the boundary's own faint register and the hoop line's own weight.
+ *
+ * Each mark sits exactly where the wall's note changes (audio.js), so it
+ * is a legend for a sound - but it reads as a ruler, and a ruler still
+ * helps when the phone is muted. Drawn in the environment layer, beneath
+ * everything that acts.
+ */
+Renderer.prototype.drawWallTicks = function(game) {
+    const W = CONFIG.RENDER.WALL_TICKS;
+    if (!W || !W.SHOW) return;
+    const c = this.c;
+    const len = W.LENGTH_CELLS * game.cellRes;
+    const right = game.COLUMNS * game.cellRes;
+    c.beginPath();
+    c.strokeStyle = game.themeColors.BOUNDARY;
+    c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+    // Internal boundaries only: the floor and the ceiling are not places
+    // the note changes, they are where the world stops.
+    for (let row = 1; row < game.ROWS; row++) {
+        const y = row * game.cellRes;
+        c.moveTo(0, y);        c.lineTo(len, y);          // reaching in from the left
+        c.moveTo(right, y);    c.lineTo(right - len, y);  // ...and from the right
+    }
+    c.stroke();
 };
 
 /**

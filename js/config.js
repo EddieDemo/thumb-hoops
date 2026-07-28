@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v72',
+    VERSION: 'v73',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -336,9 +336,10 @@ var CONFIG = {
         LOW_DECAY_S: 1.2,    // shorter than the pegs: thuds must not pile up
         WALL_GAIN: 0.42,
         FLOOR_GAIN: 0.30,
-        WALL_RUNGS: 5,       // the board's height spread across this many tones,
-                             // all within one octave so the walls stay under
-                             // the pegs' lowest note (132-230Hz vs 264Hz)
+        WALL_RUNGS: 5,       // rungs before the wall's ladder wraps. 5 = the
+                             // sléndro cycle, so the walls span one octave
+                             // and stay under the pegs' lowest note
+                             // (132-230Hz vs 264Hz). One row, one note.
 
         // Contact speed in CELLS per step, so feel is screen-independent.
         MIN_IMPACT: 0.035,   // below this a graze stays silent
@@ -645,6 +646,24 @@ var CONFIG = {
         // trial of eight candidates; the cycler that ran that trial is
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
+        // WALL TICKS: a short mark at every cell boundary on both walls -
+        // the rule for the wall's ladder, made visible. One row is one
+        // note, so a tick is exactly where the note changes.
+        //
+        // Two jobs, and the second is the stronger one. The SOUND arrives
+        // after a bounce and tells you what you did; these are visible
+        // before the shot and tell you what to aim at. So they are an
+        // aiming ruler first and an audio legend second - which matters
+        // because most phones are muted, and a ruler still works in silence.
+        //
+        // Whether a hand can reliably hit a one-cell band is an open
+        // question (measured release scatter is ~0.3 cells), so this may
+        // promise a precision nobody can use. Hence the switch.
+        WALL_TICKS: {
+            SHOW: true,
+            LENGTH_CELLS: 0.125  // how far each mark reaches into the court
+        },
+
         // The court's name, bottom-right - the version tag's mirror.
         SHOW_SEED_TAG: true,
         // Both bottom tags are anchored by their OUTER edge, one shared

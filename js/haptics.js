@@ -1,10 +1,25 @@
 // File: js/haptics.js
 // Haptic feedback: thin, defensive wrapper over navigator.vibrate.
 //
-// SUPPORT REALITY: Android (Chrome/Firefox) vibrates; iOS Safari has never
-// implemented the API and silently won't; desktops have no hardware. This
-// module therefore treats vibration as pure enhancement - every call is
-// safe everywhere, and the game must feel complete without it.
+// SUPPORT REALITY: Android (Chrome, Samsung Internet, Edge) vibrates; iOS
+// Safari has never implemented the API and silently won't; Firefox removed
+// it at 129; desktops have no hardware. This module therefore treats
+// vibration as pure enhancement - every call is safe everywhere, and the
+// game must feel complete without it.
+//
+// THERE IS NO INTENSITY. navigator.vibrate takes DURATIONS - one number, or
+// an array alternating buzz and pause - and nothing else. So impact
+// strength is expressed as pulse LENGTH, which is the only axis the
+// platform offers. A harder collision is not a stronger buzz; it is a
+// longer one, and at these durations the difference reads as weight.
+//
+// THE iOS HACK, DELIBERATELY NOT USED: toggling an <input type="checkbox"
+// switch> (Safari 17.4+) fires the Taptic Engine as a side effect, and
+// libraries exist that abuse this for arbitrary web haptics. It is not here
+// for two reasons. Apple patched the behaviour in iOS 26.5, so on current
+// phones it does nothing; and a feature built on an unintended side effect
+// is one OS release from silently dying. If haptics ever matter enough to
+// chase, the honest answer is to wait for a real API.
 //
 // DESIGN: impact strength arrives in CELL UNITS per step (impact speed /
 // cellRes), so haptic intensity is independent of screen size - the same

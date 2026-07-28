@@ -411,17 +411,27 @@ var Audio = (function() {
         while (live.length >= c.MAX_VOICES) steal(now);
         lastWallAt = now;
 
-        // Screen y grows downward; pitch rises as the ball climbs. The
-        // board's whole height is spread across ONE octave of rungs rather
-        // than climbing freely - an unbounded ladder reached above the
-        // pegs' lowest note, and an edge of the world that out-sings the
-        // thing you are aiming at has stopped being an edge.
-        // Spread over the height the ball actually USES: the top row is
-        // sky the ball leaves the screen through, so measuring against it
-        // wasted the ladder's top rung on a place nothing ever hits.
-        const h = Math.max(0, Math.min(1, (rows - y / cellRes) / (rows - 1)));
-        const degree = Math.round(h * (c.WALL_RUNGS - 1));
-        const cents = degree * c.STEP_CENTS;
+        // ONE ROW, ONE NOTE - the same rule the pegs already use (index
+        // modulo the cycle), now applied vertically. Counting up from the
+        // floor, each cell row takes the next rung and wraps every five.
+        //
+        // This replaced a proportional mapping that squeezed five bands
+        // across eleven rows and, after rounding, produced UNEVEN groups of
+        // 3, 2, 3, 2, 2 - so two contacts two cells apart could sound
+        // identical while two one cell apart differed. That is unlearnable
+        // by construction: a player cannot build a rule from a scale whose
+        // steps are not the same size. Now every adjacent row differs, and
+        // the boundaries fall exactly on the lattice, which is what makes
+        // the wall ticks (renderer.js) able to tell the truth.
+        //
+        // It wraps rather than climbing so the walls stay inside one octave
+        // and below the pegs' lowest note. Rows five apart do sound alike -
+        // but they are five cells apart on screen, and it is the LOCAL
+        // distinction a player learns from.
+        const N = Math.max(2, c.WALL_RUNGS | 0);
+        const row = Math.floor(y / cellRes);
+        const index = Math.max(0, Math.min(rows - 1, (rows - 1) - row));
+        const cents = (index % N) * c.STEP_CENTS;
         const vel = Math.min(1, strength / c.FULL_IMPACT);
         const buf = vel < 0.5 ? voices.lowSoft : voices.lowHard;
         play(buf, Math.pow(2, cents / 1200), c.WALL_GAIN * (0.3 + 0.7 * vel), now, true);
