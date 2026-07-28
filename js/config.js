@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v66',
+    VERSION: 'v67',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -323,6 +323,7 @@ var CONFIG = {
         GONG_LAG_MS: 16,        // two players are never in perfect unison...
         GONG_LAG_JITTER_MS: 12, // ...and a FIXED offset reads as an echo,
                                 // where a varying one reads as two people
+        GONG_ON_THEME: true,    // ...and it also marks the world changing state
         GONG_MIN_STREAK: 1,     // a cycle that never started needs no closing:
                                 // grinding rung 0 gets the thud, not the gong
 

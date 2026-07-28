@@ -79,4 +79,13 @@ function toggleDarkMode() {
     Persistence.save('darkMode', darkMode);
     dbg("Toggling dark mode to:", darkMode);
     applyTheme(typeof game !== 'undefined' ? game : undefined);
+
+    // THE GONG, unoffset. Everywhere else it marks a cycle closing; here it
+    // marks the whole world changing state, which is the larger event of
+    // the two. No lag: nothing else sounds at this moment, so there is
+    // nothing for it to sit behind. Placed in the toggle itself rather than
+    // in the tap handler, so the T key rings it too - one authority.
+    if (typeof Audio !== 'undefined' && CONFIG.AUDIO.GONG_ON_THEME) {
+        Audio.gong(0);
+    }
 }
