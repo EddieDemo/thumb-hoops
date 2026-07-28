@@ -611,8 +611,12 @@ var CONFIG = {
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
             SHUTTER: 0.6,
-            ALPHA: 1.0,           // full opacity: the ball smears, it does
-                                  // not ghost. Lower it for a softer read.
+            ALPHA: 1.0,           // opacity at the ball itself
+            // The alpha where the SWEPT REGION ends and the wisp begins.
+            // 1.0 is the old hard-edged capsule; lower softens the ball's
+            // trailing edge into the tail behind it. THIS is the "slight
+            // blur on the back of the circle" dial.
+            SOFTNESS: 0.55,
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
             MAX_TRAVEL_CELLS: 1.50, // above this something teleported
 
@@ -622,8 +626,9 @@ var CONFIG = {
             // real streak on a hard throw.
             TAIL: {
                 LENGTH: 1.2,   // <- THE DIAL. 0 = none, 3 = lots
-                TAPER: 0.30,   // tail-end width, as a fraction of the ball
-                ALPHA: 0.30    // where it meets the capsule; fades to 0
+                TAPER: 0.30    // tail-end width, as a fraction of the ball
+                               // (opacity now comes from the shared ramp,
+                               //  so there is no separate tail alpha)
             }
         },
 

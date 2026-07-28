@@ -127,7 +127,11 @@ class Ball {
         // step, so it describes one displayed frame - correct at 60Hz and
         // still correct at 120.
         const B = CONFIG.RENDER.BLUR;
-        if (B && B.ENABLED && !this.isStatic && this.blurPrevX !== undefined) {
+        // Applies while CARRIED as well as in flight. A ball following the
+        // thumb is moving, and the eye does not care whose hand is on it -
+        // the only difference is that a held ball has no interpolation, so
+        // drawX/drawY are simply its position.
+        if (B && B.ENABLED && this.blurPrevX !== undefined) {
             const dx = drawX - this.blurPrevX, dy = drawY - this.blurPrevY;
             const dist = Math.sqrt(dx * dx + dy * dy);
             const min = B.MIN_TRAVEL_CELLS * game.cellRes;
@@ -141,6 +145,34 @@ class Ball {
                 const backY = this.blurPrevY + dy * k;
                 const prevAlpha = c.globalAlpha;
                 const prevCap = c.lineCap;
+
+                // ONE RAMP ACROSS BOTH SHAPES. The capsule and the wedge
+                // share a single gradient running from the ball to the
+                // tail tip, so the alpha is continuous BY CONSTRUCTION.
+                // They used to be lit separately - a solid capsule ending
+                // at 1.0 against a wedge starting at 0.30 - which put a
+                // visible step exactly where the softness was wanted. The
+                // trailing edge of the ball is now a fade, not an edge.
+                const T0 = B.TAIL;
+                const tailLen = (T0 && T0.LENGTH > 0) ? dist * T0.LENGTH : 0;
+                const total = (dist * (1 - k)) + tailLen;
+                let ramp = null;
+                if (total > 0.001 && typeof c.createLinearGradient === 'function') {
+                    const ux0 = dx / dist, uy0 = dy / dist;
+                    ramp = c.createLinearGradient(
+                        drawX, drawY,
+                        drawX - ux0 * total, drawY - uy0 * total);
+                    if (ramp && typeof ramp.addColorStop === 'function') {
+                        const capEnd = (dist * (1 - k)) / total;
+                        ramp.addColorStop(0, Ball._rgba(game.themeColors.BALL, B.ALPHA));
+                        // SOFTNESS is the alpha where the swept region ends.
+                        // 1 restores the old hard capsule; lower blurs the
+                        // trailing edge into the wisp behind it.
+                        ramp.addColorStop(Math.min(0.999, capEnd),
+                            Ball._rgba(game.themeColors.BALL, B.ALPHA * B.SOFTNESS));
+                        ramp.addColorStop(1, Ball._rgba(game.themeColors.BALL, 0));
+                    } else { ramp = null; }
+                }
 
                 // THE TAIL, drawn FIRST so the solid capsule lands on top.
                 //
@@ -164,14 +196,10 @@ class Ball {
                     const r0 = this.radius, r1 = this.radius * T.TAPER;
                     // Guarded: a gradient is a cosmetic nicety, and no
                     // cosmetic nicety is allowed to throw inside the render
-                    // path. Without one, the wedge is simply skipped and
-                    // the capsule still draws.
-                    const grad = (typeof c.createLinearGradient === 'function')
-                        ? c.createLinearGradient(backX, backY, tx, ty) : null;
-                    if (grad && typeof grad.addColorStop === 'function') {
-                    grad.addColorStop(0, Ball._rgba(game.themeColors.BALL, T.ALPHA));
-                    grad.addColorStop(1, Ball._rgba(game.themeColors.BALL, 0));
-                    c.fillStyle = grad;
+                    // path. Without one, the wedge is skipped and the
+                    // capsule still draws.
+                    if (ramp) {
+                    c.fillStyle = ramp;
                     c.beginPath();
                     c.moveTo(backX + px * r0, backY + py * r0);
                     c.lineTo(backX - px * r0, backY - py * r0);
@@ -182,8 +210,10 @@ class Ball {
                     }
                 }
 
-                c.globalAlpha = prevAlpha * B.ALPHA;
-                c.strokeStyle = game.themeColors.BALL;
+                // The swept region, lit by the SAME ramp - so it meets the
+                // wedge at exactly the wedge's own opacity.
+                c.strokeStyle = ramp || game.themeColors.BALL;
+                if (!ramp) c.globalAlpha = prevAlpha * B.ALPHA;
                 c.lineWidth = this.radius * 2;
                 c.lineCap = 'round';
                 c.beginPath();

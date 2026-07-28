@@ -828,6 +828,11 @@ Game.prototype.startAiming = function(startX, startY) {
     this.currentBall.sleeping = false;
     this.currentBall.isStatic = true;
     this.currentBall.velocity = { x: 0, y: 0 };
+    // The ball is about to jump to the thumb. Forget where it was drawn,
+    // or the first held frame would smear across that leap - a journey it
+    // never made.
+    this.currentBall.blurPrevX = undefined;
+    this.currentBall.blurPrevY = undefined;
     this.moveCarriedBall(startX, startY);
 };
 
