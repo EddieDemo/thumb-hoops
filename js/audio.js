@@ -424,14 +424,25 @@ var Audio = (function() {
         // the boundaries fall exactly on the lattice, which is what makes
         // the wall ticks (renderer.js) able to tell the truth.
         //
-        // It wraps rather than climbing so the walls stay inside one octave
-        // and below the pegs' lowest note. Rows five apart do sound alike -
-        // but they are five cells apart on screen, and it is the LOCAL
-        // distinction a player learns from.
+        // IT CLIMBS. Each five rows lifts an octave, exactly as the pegs
+        // do (degree = i%5, octave = floor(i/5)) - so every one of the
+        // eleven bands is a different pitch and the wall ticks are telling
+        // the whole truth rather than most of it.
+        //
+        // It used to wrap instead, to keep the walls under the pegs' lowest
+        // note. That bought a clean register hierarchy at the price of a
+        // small lie about the space: you climbed the wall and the pitch
+        // fell back to the bottom. Above row 5 the walls now share a
+        // register with the pegs - but slenthem is a few low partials with
+        // a long decay and bonang is a bright kettle, so they share a pitch
+        // without sharing a voice, and the ear separates them by timbre.
+        //
+        // WALL_CLIMB false restores the wrap.
         const N = Math.max(2, c.WALL_RUNGS | 0);
         const row = Math.floor(y / cellRes);
         const index = Math.max(0, Math.min(rows - 1, (rows - 1) - row));
-        const cents = (index % N) * c.STEP_CENTS;
+        const oct = c.WALL_CLIMB ? Math.floor(index / N) : 0;
+        const cents = (index % N) * c.STEP_CENTS + oct * 1200;
         const vel = Math.min(1, strength / c.FULL_IMPACT);
         const buf = vel < 0.5 ? voices.lowSoft : voices.lowHard;
         play(buf, Math.pow(2, cents / 1200), c.WALL_GAIN * (0.3 + 0.7 * vel), now, true);

@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v73',
+    VERSION: 'v74',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -336,10 +336,14 @@ var CONFIG = {
         LOW_DECAY_S: 1.2,    // shorter than the pegs: thuds must not pile up
         WALL_GAIN: 0.42,
         FLOOR_GAIN: 0.30,
-        WALL_RUNGS: 5,       // rungs before the wall's ladder wraps. 5 = the
-                             // sléndro cycle, so the walls span one octave
-                             // and stay under the pegs' lowest note
-                             // (132-230Hz vs 264Hz). One row, one note.
+        WALL_RUNGS: 5,       // rungs per octave on the wall's ladder. 5 = the
+                             // sléndro cycle. One row, one note.
+        WALL_CLIMB: true,    // ...and each five rows lifts an OCTAVE, so all
+                             // eleven bands are distinct and the wall ticks
+                             // tell the whole truth. Costs the old register
+                             // hierarchy: above row 5 the walls share the
+                             // pegs' range (though not their timbre).
+                             // false = wrap inside one octave, 132-230Hz.
 
         // Contact speed in CELLS per step, so feel is screen-independent.
         MIN_IMPACT: 0.035,   // below this a graze stays silent
