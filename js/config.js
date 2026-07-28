@@ -146,7 +146,10 @@ var CONFIG = {
             DAMP_EXP: 2,            // higher modes die as n^this - which is what
                                     // migrates the bulge to the centre
             DECAY_S: 0.40,
-            LIFETIME_MULT: 2.2,     // stop drawing the polyline after this
+            LIFETIME_MULT: 1.2,     // stop drawing the polyline after this. The
+                                    // hoop itself has faded by ~250ms, so a
+                                    // string still ringing at 800ms is arithmetic
+                                    // nobody can see.
             SAMPLES: 28,
             EDGE_CLAMP: 0.06        // a pluck on a peg is not a pluck
         },

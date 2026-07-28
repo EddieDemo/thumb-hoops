@@ -409,7 +409,9 @@ var Audio = (function() {
      * back to the bottom: the whole arc is hearable.
      *
      * @param {number} streak - baskets BEFORE this one, so the first is home.
-     * @param {number} speed  - how fast it crossed, in cells per step. The
+     * @param {number} t      - the SHARED crossing strength, 0..1, computed
+     *        once in registerScore so the pluck's brightness and this note's
+     *        volume can never disagree about the same event. The
      *        pluck answers it, as every collision answers its impact - but
      *        over a NARROW range. A basket is a binary achievement, and the
      *        physics here runs against the drama: a ball that rattles in has
@@ -418,16 +420,14 @@ var Audio = (function() {
      *        the quiet one. So the range is compressed: every basket lands
      *        clearly, and speed colours it rather than deciding it.
      */
-    function score(streak, speed) {
+    function score(streak, strength) {
         if (!enabled() || !ready || !ctx) return;
         const c = cfg();
         const k = Math.max(0, streak | 0);
         const oct = Math.min(Math.floor(k / 5), c.STRING_MAX_OCT);
         const degree = k % 5;
 
-        const sp = isFinite(speed) ? speed : c.STRING_FULL_SPEED;
-        const t = Math.max(0, Math.min(1,
-            (sp - c.STRING_SOFT_SPEED) / Math.max(0.0001, c.STRING_FULL_SPEED - c.STRING_SOFT_SPEED)));
+        const t = isFinite(strength) ? Math.max(0, Math.min(1, strength)) : 1;
         const pair = voices.strings[oct];
         const buf = t < 0.5 ? pair[0] : pair[1];
         const gain = c.STRING_GAIN * (c.STRING_MIN_LEVEL + (1 - c.STRING_MIN_LEVEL) * t);
