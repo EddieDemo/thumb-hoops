@@ -395,7 +395,10 @@ var CONFIG = {
         MAX_GLYPHS: 40,      // beyond this the front is dropped: the ENDING
                              // is the part that matters, and a chat message
                              // should stay one screen
-        SHOW_GLYPH: true     // the tap affordance, top-left
+        SHOW_GLYPH: true,    // the tap affordance, top-left
+        // The tap's acknowledgement - a clipboard copy is invisible, so the
+        // button needs a voice. 'gong' | 'kenong' | null (silent).
+        SOUND: 'gong'
     },
 
     GAME: {

@@ -523,6 +523,14 @@ var Audio = (function() {
         }
     }
 
+    /** A single kenong, unpitched by streak - an acknowledgement, not a rung. */
+    function kenong() {
+        if (!enabled() || !ready || !ctx) return;
+        const now = ctx.currentTime;
+        reap(now);
+        play(voices.kenong, 1, cfg().COLOTOMY.KENONG_GAIN, now, false);
+    }
+
     /**
      * The GONG: the gongan closing. In gamelan the gong marks the end of
      * a cycle - and a run's cycle ends when it is LOST, not when it is
@@ -561,6 +569,7 @@ var Audio = (function() {
         peg: sealed(peg, 'peg'),
         score: sealed(score, 'score'),
         colotomy: sealed(colotomy, 'colotomy'),
+        kenong: sealed(kenong, 'kenong'),
         wall: sealed(wall, 'wall'),
         floor: sealed(floor, 'floor'),
         gong: sealed(gong, 'gong'),

@@ -82,7 +82,10 @@ var Share = (function() {
             CONFIG.SHARE.TITLE + ' \u00b7 ' + prettyDate(d.seed),
             d.best + ' in ' + d.missesAtBest
         ];
-        const shape = shapeOf(d.seqAtBest);
+        // noShape: a day that was already underway when shape-recording
+        // arrived. It keeps its numbers and forgoes the picture (see the
+        // migration note in game.js) rather than draw one that disagrees.
+        const shape = d.noShape ? '' : shapeOf(d.seqAtBest);
         if (shape) lines.push('', shape);
         lines.push('', courtURL(game));
         return lines.join('\n');
@@ -96,6 +99,21 @@ var Share = (function() {
     function shareDaily(game) {
         const text = buildDaily(game);
         if (!text) return false;
+
+        // ACKNOWLEDGEMENT. A copy to the clipboard is invisible, so without
+        // this the button does nothing you can perceive. The gong marks the
+        // day being set down.
+        //
+        // (Note it now marks three things: a run ending, the theme
+        // changing, and this. Each is defensible alone, but a sound that
+        // answers everything eventually says nothing - if it starts to feel
+        // spent, CONFIG.SHARE.SOUND accepts 'kenong', which is punctuation
+        // rather than closure and leaves the gong to mean one thing.)
+        if (typeof Audio !== 'undefined' && CONFIG.SHARE.SOUND) {
+            if (CONFIG.SHARE.SOUND === 'kenong') Audio.kenong();
+            else Audio.gong(0);
+        }
+
         try {
             if (navigator.share) {
                 navigator.share({ text: text }).catch(() => copy(text));

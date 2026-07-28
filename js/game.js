@@ -93,9 +93,18 @@ function Game() {
     this.daily = (storedDaily && storedDaily.seed === this.courtSeed)
         ? storedDaily
         : { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0, seq: [], seqAtBest: [] };
-    // Older saved days predate the shape - give them empty arrays rather
-    // than letting the share builder meet undefined.
-    if (!Array.isArray(this.daily.seq)) this.daily.seq = [];
+    // A DAY THAT PREDATES THE SHAPE CANNOT KNOW ITS OWN HISTORY. Its
+    // attempts happened while nothing was watching, so the misses in its
+    // record have no corresponding circles. Recording from here would be
+    // worse than recording nothing: the snapshot would show only the
+    // attempts since the upgrade, and draw a picture claiming fewer misses
+    // than the number beside it. A shape that disagrees with its own
+    // numbers is a lie, so this day simply goes without one. Tomorrow's
+    // starts clean, and every day after it.
+    if (!Array.isArray(this.daily.seq)) {
+        this.daily.seq = [];
+        if (this.daily.best > 0) this.daily.noShape = true;
+    }
     if (!Array.isArray(this.daily.seqAtBest)) this.daily.seqAtBest = [];
     dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - exhibition)' : ' (daily)'));
     // Detached one-shot effects (see effects.js) - may outlive the round
