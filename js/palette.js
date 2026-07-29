@@ -191,8 +191,15 @@ var Palette = (function() {
      * legibility holds on every hue, by construction.
      */
     function buildTheme(p) {
-        const t = cfg().CONTRAST[mode === 'dark' ? 'DARK' : 'LIGHT'];
-        const pivot = cfg().CONTRAST.PIVOT_Y;
+        // The active preset decides every target. Which preset is active is
+        // owned by colors.js (system request -> stored choice -> default);
+        // the palette only asks.
+        const C = cfg().CONTRAST;
+        const presetName = (typeof activeContrast === 'function')
+            ? activeContrast() : C.DEFAULT;
+        const preset = C.PRESETS[presetName] || C.PRESETS[C.DEFAULT];
+        const t = preset[mode === 'dark' ? 'DARK' : 'LIGHT'];
+        const pivot = C.PIVOT_Y;
         const b = baseAt(p);
         const bgY = luminanceHSB(b.H, b.S, b.B);
         const dir = bgY >= pivot ? 'darker' : 'lighter';
@@ -214,9 +221,20 @@ var Palette = (function() {
         const ink = ratioOf(inkDark) >= ratioOf(inkLight) ? inkDark : inkLight;
 
         const score    = solveContrast(b.H, b.S,  bgY, t.SCORE,    dir);
-        const best     = solveContrast(b.H, b.S,  bgY, t.BEST,     dir);
+        const control  = solveContrast(b.H, b.S,  bgY, t.CONTROL,  dir);
+        const info     = solveContrast(b.H, b.S,  bgY, t.INFO,     dir);
+        const ambient  = solveContrast(b.H, b.S,  bgY, t.AMBIENT,  dir);
         const boundary = solveContrast(b.H, b.S,  bgY, t.BOUNDARY, dir);
         const cell2    = solveContrast(b.H, b.S,  bgY, t.CELL2,    dir);
+        // THE DOOR IS ALWAYS VISIBLE. The control that reaches the
+        // accessible preset must be findable BY THE PERSON WHO NEEDS IT -
+        // a high-contrast button drawn at 1.24:1 is a circular failure, and
+        // the commonest way this pattern is got wrong. So this one glyph is
+        // solved against the ACCESSIBLE preset's CONTROL target no matter
+        // which preset is running.
+        const acc = C.PRESETS[C.ACCESSIBLE] || preset;
+        const doorTarget = Math.max(t.CONTROL, acc[mode === 'dark' ? 'DARK' : 'LIGHT'].CONTROL);
+        const door     = solveContrast(b.H, b.S,  bgY, doorTarget, dir);
 
         const inkHex = hsbToHex(ink.H, ink.S, ink.B);
         return {
@@ -224,7 +242,10 @@ var Palette = (function() {
             CELL_FILL_1: hsbToHex(b.H, b.S, b.B),
             CELL_FILL_2: hsbToHex(cell2.H, cell2.S, cell2.B),
             SCORE:       hsbToHex(score.H, score.S, score.B),
-            BEST:        hsbToHex(best.H, best.S, best.B),
+            CONTROL:     hsbToHex(control.H, control.S, control.B),
+            INFO:        hsbToHex(info.H, info.S, info.B),
+            AMBIENT:     hsbToHex(ambient.H, ambient.S, ambient.B),
+            CONTRAST_DOOR: hsbToHex(door.H, door.S, door.B),
             BOUNDARY:    hsbToHex(boundary.H, boundary.S, boundary.B),
             // The ink itself, by name. BALL/NODE/HOOP are the same value
             // under their role names; INK is for anything that needs the
@@ -313,7 +334,15 @@ var Palette = (function() {
                 if (rerollOnArrival) { rerollOnArrival = false; rollHue(); }
             }
         }
-        const key = mode + '|' + displayP.toFixed(4) + '|' + (baseHue === null ? 'x' : baseHue.toFixed(1));
+        // THE KEY MUST NAME EVERY INPUT buildTheme() reads. Mode and hue
+        // were here because someone remembered to add them; the contrast
+        // preset was not, so switching preset changed the targets and the
+        // cache handed back the old colours anyway - a control that did
+        // nothing at all. Anything new that buildTheme consults belongs
+        // here in the same breath.
+        const contrast = (typeof activeContrast === 'function') ? activeContrast() : '';
+        const key = mode + '|' + displayP.toFixed(4) + '|' +
+                    (baseHue === null ? 'x' : baseHue.toFixed(1)) + '|' + contrast;
         if (key !== cacheKey || !cachedTheme) {
             cachedTheme = buildTheme(displayP);
             cacheKey = key;

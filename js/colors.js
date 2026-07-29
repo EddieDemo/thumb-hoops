@@ -86,6 +86,80 @@ function isDarkMode() {
     return darkMode;
 }
 
+// --- THE CONTRAST PRESET ------------------------------------------------
+// Resolved the same way the theme is, and for the same reason: a system
+// that does not know a preference should ASK rather than assume.
+//
+//   1. an explicit ?contrast= in the URL   (a tester link - the whole point)
+//   2. a stored choice                     (they have decided; it is theirs)
+//   3. the OS asking for more contrast     (they told their DEVICE already,
+//                                           and should not have to find a
+//                                           button to be understood)
+//   4. the house default
+//
+// Note what (3) buys: someone who needs more contrast never has to locate
+// the control that provides it.
+let contrastPreset = null;
+
+function activeContrast() {
+    const C = CONFIG.COLORS.RAMP.CONTRAST;
+    if (contrastPreset && C.PRESETS[contrastPreset]) return contrastPreset;
+
+    let chosen = null;
+    try {
+        const q = new URLSearchParams(window.location.search).get('contrast');
+        if (q && C.PRESETS[q]) chosen = q;
+    } catch (e) { /* no URL, no matter */ }
+
+    if (!chosen) {
+        const stored = Persistence.load('contrast', null);
+        if (stored && C.PRESETS[stored]) chosen = stored;
+    }
+    if (!chosen) {
+        try {
+            if (window.matchMedia && window.matchMedia('(prefers-contrast: more)').matches) {
+                chosen = C.ACCESSIBLE;
+            }
+        } catch (e) { /* no matchMedia, no matter */ }
+    }
+    contrastPreset = chosen || C.DEFAULT;
+    return contrastPreset;
+}
+
+/**
+ * Steps through CONTRAST.CYCLE - the presets the BUTTON can reach, in the
+ * order they are listed. A ladder rather than a switch, so the middle rung
+ * can be compared on glass instead of only on a URL.
+ *
+ * The cycle is deliberately a SEPARATE list from PRESETS: any preset can
+ * exist for testing, but only the ones named here are reachable by tapping.
+ * ACCESSIBLE must appear in it, or the accessibility control would no
+ * longer reach an accessible state - which is asserted below rather than
+ * left to whoever edits the config next.
+ */
+function toggleContrast() {
+    const C = CONFIG.COLORS.RAMP.CONTRAST;
+    const cycle = (C.CYCLE && C.CYCLE.length) ? C.CYCLE : [C.DEFAULT, C.ACCESSIBLE];
+    const here = cycle.indexOf(activeContrast());
+    // Not in the cycle (arrived by URL): the next tap starts it from the top.
+    const next = cycle[(here + 1) % cycle.length];
+    contrastPreset = next;
+    Persistence.save('contrast', next);
+    applyTheme(typeof game !== 'undefined' ? game : undefined);
+}
+
+function isHighContrast() {
+    return activeContrast() === CONFIG.COLORS.RAMP.CONTRAST.ACCESSIBLE;
+}
+
+/** Where on the ladder we are, 0..1 - the glyph draws its fill from this. */
+function contrastStep() {
+    const C = CONFIG.COLORS.RAMP.CONTRAST;
+    const cycle = (C.CYCLE && C.CYCLE.length) ? C.CYCLE : [C.DEFAULT, C.ACCESSIBLE];
+    const i = cycle.indexOf(activeContrast());
+    return (i < 0 || cycle.length < 2) ? 0 : i / (cycle.length - 1);
+}
+
 function toggleDarkMode() {
     darkMode = !darkMode;
     Persistence.save('darkMode', darkMode);

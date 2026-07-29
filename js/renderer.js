@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' }, share: { key: '' }, mute: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' }, share: { key: '' }, mute: { key: '' }, contrast: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -119,6 +119,7 @@ Renderer.prototype.drawFrame = function() {
     this.drawWallTicks(game);    // The wall's ladder, made visible
     this.drawMuteToggle(game);   // Sound on/off, top-left
     this.drawShareGlyph(game);   // Share the day, top-centre
+    this.drawContrastToggle(game); // Raise contrast, left of the theme glyph
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);
     this.drawSeedTag(game);   // Deploy verification, bottom-left cell
@@ -269,7 +270,7 @@ Renderer.prototype.drawGhostBall = function(game) {
  */
 Renderer.prototype.drawVersionTag = function(game) {
     const cached = this.getCachedText('version', CONFIG.VERSION, CONFIG.RENDER.WEIGHT_WATERMARK,
-        game.cellRes * 0.25, game.themeColors.SCORE);
+        game.cellRes * 0.25, game.themeColors.AMBIENT);
     const leftX = CONFIG.RENDER.TAG_MARGIN_CELLS * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
@@ -291,7 +292,7 @@ Renderer.prototype.drawVersionTag = function(game) {
 Renderer.prototype.drawSeedTag = function(game) {
     if (!CONFIG.RENDER.SHOW_SEED_TAG) return;
     const cached = this.getCachedText('seed', game.courtSeed, CONFIG.RENDER.WEIGHT_WATERMARK,
-        game.cellRes * 0.25, game.themeColors.SCORE);
+        game.cellRes * 0.25, game.themeColors.AMBIENT);
     const rightX = (game.COLUMNS - CONFIG.RENDER.TAG_MARGIN_CELLS) * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
@@ -316,7 +317,7 @@ Renderer.prototype.drawThemeToggle = function(game) {
     // light court -> moon (tap for dark).
     const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u2739' : '\u23FE';
     const cached = this.getCachedText('mode', glyph, CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.BEST);
+        game.cellRes * 0.5, game.themeColors.CONTROL);
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
     // lattice, not to a floating margin.
     const centerX = (game.COLUMNS - 0.5) * game.cellRes;
@@ -424,14 +425,14 @@ Renderer.prototype.drawBestStreak = function(game) {
     if (Capture.enabled()) {
         const cx = (game.COLUMNS * game.cellRes) / 2;
         const rec = this.getCachedText('best', 'REC ' + Capture.count() + '/' + Capture.target(),
-            '600', game.cellRes * 0.5, game.themeColors.BEST);
+            '600', game.cellRes * 0.5, game.themeColors.INFO);
         this.c.drawImage(rec.canvas, cx - rec.w / 2, game.viewTopY + game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
         // Testers usually receive this link without anyone beside them:
         // the protocol has to be legible on the glass itself.
         const done = Capture.count() >= Capture.target();
         const hint = this.getCachedText('captureHint',
             done ? 'TAP HERE TO SEND' : 'SAME THROW EVERY TIME',
-            '400', game.cellRes * 0.26, game.themeColors.BEST);
+            '400', game.cellRes * 0.26, game.themeColors.INFO);
         this.c.drawImage(hint.canvas, cx - hint.w / 2, game.viewTopY + game.cellRes * 1.45 - hint.h / 2, hint.w, hint.h);
         return;
     }
@@ -450,7 +451,7 @@ Renderer.prototype.drawBestStreak = function(game) {
     // one basket the centre reads 2, the record reads 1-0.
     const label = game.daily.best + CONFIG.RENDER.RECORD_SEP2 + game.daily.missesAtBest;
     const cached = this.getCachedText('best', label, CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.BEST);
+        game.cellRes * 0.5, game.themeColors.INFO);
     // Centred in the SHOOT AREA - the day's record belongs to the player's
     // own territory, not to the sky. Environment layer, so the resting
     // ball passes in front of it.
@@ -514,19 +515,47 @@ Renderer.prototype.drawMuteToggle = function(game) {
     const c = this.c;
     const muted = (typeof Audio !== 'undefined' && Audio.isMuted) ? Audio.isMuted() : false;
     const cached = this.getCachedText('mute', '\u266A', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.BEST);
+        game.cellRes * 0.5, game.themeColors.CONTROL);
     const cx = 0.5 * game.cellRes;
     const cy = game.viewTopY + 0.5 * game.cellRes;
     c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
     if (muted) {
         const r0 = game.cellRes * 0.22;
         c.beginPath();
-        c.strokeStyle = game.themeColors.BEST;
+        c.strokeStyle = game.themeColors.CONTROL;
         c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
         c.moveTo(cx - r0, cy + r0);
         c.lineTo(cx + r0, cy - r0);
         c.stroke();
     }
+};
+
+/**
+ * THE CONTRAST TOGGLE, between share and the theme glyph.
+ *
+ * Drawn in CONTRAST_DOOR, which is solved against the ACCESSIBLE preset's
+ * control target whatever preset is running - so the one control that
+ * reaches higher contrast is always findable by the person who needs it.
+ * A high-contrast button nobody with low vision can see is the circular
+ * failure this pattern is famous for.
+ *
+ * Half-filled circle: the universal mark for contrast, and it doubles as
+ * its own state - filled side left in house, right when raised.
+ */
+Renderer.prototype.drawContrastToggle = function(game) {
+    if (!CONFIG.RENDER.SHOW_CONTRAST_TOGGLE) return;
+    // The glyph fills as the ladder climbs: hollow at the house end,
+    // half at the middle rung, solid at full AA. State, not destination -
+    // a control's own contrast is the one thing it cannot afford to be
+    // coy about.
+    const GLYPHS = ['\u25CB', '\u25D1', '\u25CF'];   // circle: empty, half, full
+    const step = (typeof contrastStep === 'function') ? contrastStep() : 0;
+    const glyph = GLYPHS[Math.round(step * (GLYPHS.length - 1))] || GLYPHS[0];
+    const cached = this.getCachedText('contrast', glyph,
+        CONFIG.RENDER.WEIGHT_LABEL, game.cellRes * 0.5, game.themeColors.CONTRAST_DOOR);
+    const cx = (game.COLUMNS - 1.5) * game.cellRes;
+    const cy = game.viewTopY + 0.5 * game.cellRes;
+    this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
 };
 
 /**
@@ -543,7 +572,7 @@ Renderer.prototype.drawShareGlyph = function(game) {
     if (!CONFIG.SHARE.SHOW_GLYPH) return;
     if (typeof Share === 'undefined' || !Share.hasResult(game)) return;
     const cached = this.getCachedText('share', '\u2197', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.BEST);
+        game.cellRes * 0.5, game.themeColors.CONTROL);
     const cx = (game.COLUMNS / 2) * game.cellRes;
     const cy = game.viewTopY + 0.5 * game.cellRes;
     this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);

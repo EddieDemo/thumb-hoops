@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v81',
+    VERSION: 'v84',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -687,6 +687,8 @@ var CONFIG = {
         // font load degrades to something well drawn rather than to Times.
         // The mute toggle, top-left - opposite the theme toggle.
         SHOW_MUTE: true,
+        // The contrast toggle, left of the theme glyph.
+        SHOW_CONTRAST_TOGGLE: true,
 
         // WALL TICKS: a short mark at every cell boundary on both walls -
         // the rule for the wall's ladder, made visible. One row is one
@@ -801,8 +803,70 @@ var CONFIG = {
             // flare term makes equal ratios read far louder), hence the
             // dark ladder uses wider numeric spacing for similar optics.
             CONTRAST: {
-                LIGHT: { INK: 6.9,  SCORE: 1.14, BEST: 1.24, BOUNDARY: 1.30, CELL2: 1.028 },
-                DARK:  { INK: 13.0, SCORE: 1.45, BEST: 1.70, BOUNDARY: 2.00, CELL2: 1.05 },
+                // --- ROLES, ordered by how badly the player needs to see
+                // the thing. That ordering is the whole design: contrast is
+                // not a taste axis here, it is a statement about necessity.
+                //
+                //   INK      the ball, pegs and hoop line - the PHYSICAL
+                //            world. Unplayable if unseen.
+                //   CONTROL  mute / share / theme / contrast. Must be
+                //            FOUND, which is what WCAG 1.4.11's 3:1 is for.
+                //   INFO     the day's record. Must be READABLE when looked
+                //            for; it is the point of a daily court.
+                //   SCORE    the level numeral. Also information, but four
+                //            cells tall - size discounts contrast, which is
+                //            why WCAG itself asks 3:1 of large text where
+                //            it asks 4.5 of small. Solved fainter ON PURPOSE
+                //            so it reads at the same WEIGHT as the label.
+                //   AMBIENT  version and seed tags. Watermarks, for the
+                //            developer more than the player.
+                //   BOUNDARY wall ticks, shoot dots - hints, not statements.
+                //   CELL2    the checkerboard, if it is even on.
+                //
+                // --- PRESETS. A ladder, not a pair. The rungs exist so the
+                // question "can a stranger find the mute button" can be
+                // answered by a tester on a link (?contrast=high) instead of
+                // guessed at by the one person who already knows where it is.
+                //
+                // 'high' meets the applicable WCAG AA threshold for each
+                // role: 3:1 for controls and for large text, 4.5:1 for small
+                // text. It WILL look like a different game - that is what
+                // the standard actually costs, and seeing it plainly is more
+                // useful than a preset that splits the difference.
+                DEFAULT: 'house',
+                ACCESSIBLE: 'high',   // what an OS contrast request selects
+                // What the BUTTON steps through, in order. A separate list
+                // from PRESETS on purpose: a preset can exist for testing
+                // (?contrast=...) without being one more tap for everyone
+                // else. ACCESSIBLE must be in here - the control that
+                // reaches accessibility has to actually arrive at it.
+                CYCLE: ['house', 'clear', 'high'],
+
+                PRESETS: {
+                    // The house style: austere, recessive, everything but
+                    // the physical world barely there.
+                    house: {
+                        LIGHT: { INK: 6.9,  CONTROL: 1.24, INFO: 1.24, SCORE: 1.14, AMBIENT: 1.24, BOUNDARY: 1.30, CELL2: 1.028 },
+                        DARK:  { INK: 13.0, CONTROL: 1.70, INFO: 1.70, SCORE: 1.45, AMBIENT: 1.70, BOUNDARY: 2.00, CELL2: 1.05 }
+                    },
+                    // The middle rung. Controls findable, information
+                    // legible, watermarks still whispers. The one most
+                    // likely to survive a tester round.
+                    clear: {
+                        LIGHT: { INK: 6.9,  CONTROL: 2.40, INFO: 2.60, SCORE: 1.70, AMBIENT: 1.60, BOUNDARY: 1.70, CELL2: 1.05 },
+                        DARK:  { INK: 13.0, CONTROL: 3.20, INFO: 3.50, SCORE: 2.20, AMBIENT: 2.10, BOUNDARY: 2.40, CELL2: 1.10 }
+                    },
+                    // WCAG AA for every role at its applicable threshold.
+                    // Targets sit a hair ABOVE the thresholds. The solve
+                    // lands on an 8-bit hex, so asking for exactly 4.50
+                    // delivered 4.48 - compliant in intent and failing in
+                    // fact. The number that matters is the one you can
+                    // measure off the screen.
+                    high: {
+                        LIGHT: { INK: 7.1,  CONTROL: 3.10, INFO: 4.60, SCORE: 3.10, AMBIENT: 4.60, BOUNDARY: 3.10, CELL2: 1.10 },
+                        DARK:  { INK: 13.0, CONTROL: 3.10, INFO: 4.60, SCORE: 3.10, AMBIENT: 4.60, BOUNDARY: 3.10, CELL2: 1.15 }
+                    }
+                },
 
                 // Background luminance below which the solve direction
                 // flips: elements become lighter tints instead of darker

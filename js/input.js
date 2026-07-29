@@ -266,6 +266,15 @@ InputHandler.prototype.handlePointerDown = function(event) {
         return;
     }
 
+    // CONTRAST: left of the theme glyph. The door to the accessible
+    // preset, and always drawn so it can be found.
+    if (CONFIG.RENDER.SHOW_CONTRAST_TOGGLE && topBand &&
+        Math.abs(pos.x - (this.game.COLUMNS - 1.5) * this.game.cellRes) < this.game.cellRes * 0.7) {
+        dbg('InputHandler: Contrast toggled.');
+        if (typeof toggleContrast === 'function') toggleContrast();
+        return;
+    }
+
     // Theme toggle (product feature): a tap in the top-right glyph region
     // flips light/dark - same action as the T key, persisted.
     // The region hangs from the VISIBLE top, exactly like the glyph does.
