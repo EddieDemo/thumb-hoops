@@ -15,7 +15,19 @@ let lastAppliedBackground = null; // Body style is only touched on real change
  */
 function applyTheme(game) {
     if (!darkModeLoaded) {
-        darkMode = Persistence.load('darkMode', false) === true;
+        // A STORED CHOICE ALWAYS WINS. Absent one, ask the system instead
+        // of assuming light - assuming was a system claiming to know
+        // something it did not, and it cost every dark-mode visitor a flash
+        // of white before they found the toggle. Once they choose, the
+        // choice is theirs forever; this only speaks when nothing has been
+        // said.
+        const stored = Persistence.load('darkMode', null);
+        if (stored === true || stored === false) {
+            darkMode = stored;
+        } else {
+            darkMode = !!(typeof window !== 'undefined' && window.matchMedia &&
+                          window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
         darkModeLoaded = true;
     }
     Palette.setMode(darkMode ? 'dark' : 'light');

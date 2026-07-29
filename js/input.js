@@ -244,14 +244,23 @@ InputHandler.prototype.handlePointerDown = function(event) {
     }
 
 
-    // SHARE: a tap in the top-LEFT corner copies the day. Same visible-top
-    // anchoring as every other screen-fixed region, and a no-op when there
-    // is nothing to share - so it can never swallow a tap for nothing.
+    const topBand = pos.y > this.game.viewTopY &&
+                    pos.y < this.game.viewTopY + this.game.cellRes * 1.4;
+
+    // MUTE: top-LEFT. Checked before anything else in the band, because it
+    // is the one control a player reaches for URGENTLY - in a quiet room,
+    // on a train, with someone asleep next door.
+    if (CONFIG.RENDER.SHOW_MUTE && topBand && pos.x < this.game.cellRes * 1.4) {
+        dbg('InputHandler: Mute toggled.');
+        if (typeof Audio !== 'undefined' && Audio.toggleMuted) Audio.toggleMuted();
+        return;
+    }
+
+    // SHARE: top-CENTRE. A no-op when there is nothing to share, so it can
+    // never swallow a tap for nothing.
     if (CONFIG.SHARE.SHOW_GLYPH && typeof Share !== 'undefined' &&
-        Share.hasResult(this.game) &&
-        pos.x < this.game.cellRes * 1.4 &&
-        pos.y > this.game.viewTopY &&
-        pos.y < this.game.viewTopY + this.game.cellRes * 1.4) {
+        Share.hasResult(this.game) && topBand &&
+        Math.abs(pos.x - (this.game.COLUMNS / 2) * this.game.cellRes) < this.game.cellRes * 0.7) {
         dbg('InputHandler: Share tapped.');
         Share.shareDaily(this.game);
         return;

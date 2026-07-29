@@ -251,6 +251,7 @@ Game.prototype.start = function() {
     // streak was written faithfully and never read back, and a dark-mode
     // preference survived until exactly the moment you reloaded.)
     applyTheme(this);
+    if (typeof Audio !== 'undefined' && Audio.restoreMuted) Audio.restoreMuted();
 
     // Interruptibility (the "queue test"): start() runs once per page load,
     // so restoring here means closing the tab mid-streak and reopening
@@ -828,11 +829,11 @@ Game.prototype.startAiming = function(startX, startY) {
     this.currentBall.sleeping = false;
     this.currentBall.isStatic = true;
     this.currentBall.velocity = { x: 0, y: 0 };
-    // The ball is about to jump to the thumb. Forget where it was drawn,
-    // or the first held frame would smear across that leap - a journey it
-    // never made.
-    this.currentBall.blurPrevX = undefined;
-    this.currentBall.blurPrevY = undefined;
+    // The ball is about to jump to the thumb. Forget where it has been
+    // drawn, or the smear would run across that leap - a journey it never
+    // made. (The per-segment guard would catch it too; clearing is the
+    // honest statement of intent.)
+    this.currentBall.blurTrail = null;
     this.moveCarriedBall(startX, startY);
 };
 

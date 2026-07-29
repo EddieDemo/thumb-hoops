@@ -596,6 +596,27 @@ var Audio = (function() {
         gong: sealed(gong, 'gong'),
         isReady: function() { return ready; },
         // For a future mute control; the config flag is the master switch.
-        setEnabled: function(on) { CONFIG.AUDIO.ENABLED = !!on; if (on) init(); }
+        setEnabled: function(on) { CONFIG.AUDIO.ENABLED = !!on; if (on) init(); },
+
+        // THE MUTE SWITCH. One authority: the flag, the persistence and the
+        // acknowledgement all live here, so the tap handler only has to ask.
+        isMuted: function() { return !CONFIG.AUDIO.ENABLED; },
+        restoreMuted: function() {
+            const stored = Persistence.load('muted', null);
+            if (stored === true || stored === false) CONFIG.AUDIO.ENABLED = !stored;
+        },
+        toggleMuted: sealed(function() {
+            const nowOn = !CONFIG.AUDIO.ENABLED;
+            CONFIG.AUDIO.ENABLED = nowOn;
+            Persistence.save('muted', !nowOn);
+            if (nowOn) {
+                init();
+                // Proof, not ceremony: unmuting should DEMONSTRATE that
+                // sound works. A kenong is clear and quick - the gong is
+                // already answering three other things, and a sound that
+                // answers everything eventually says nothing.
+                kenong();
+            }
+        }, 'toggleMuted')
     };
 })();

@@ -108,124 +108,86 @@ class Ball {
             drawY = this.prePixelY + (this.pixelY - this.prePixelY) * a;
         }
 
-        // MOTION BLUR - the swept region, not more ghosts.
+        // MOTION BLUR - the swept region, along the path the ball ACTUALLY
+        // TOOK.
         //
-        // A circle travelling in a straight line sweeps a CAPSULE, and a
+        // A circle travelling in a straight line sweeps a capsule, and a
         // capsule is exactly what a stack of full-opacity copies converges
-        // to. So draw the swept shape itself: a round-capped thick line
-        // from where the ball was drawn last frame to where it is now. One
-        // path, geometrically exact, and it scales with speed for free -
-        // at rest the capsule is the circle, at speed it is a smear.
+        // to. So the smear is stroked rather than stamped: a thick,
+        // round-jointed POLYLINE back through the recent drawn positions.
         //
-        // SHUTTER is borrowed from cameras and is what keeps it subtle: a
-        // real shutter is open for only part of each frame, so the blur
-        // covers a fraction of the travel rather than all of it. It trails
-        // BEHIND the ball, because the ball is at its position and the
-        // smear is where it has just been.
+        // It used to be a single straight segment between last frame and
+        // this one - a CHORD. Over one frame a chord and the true arc are
+        // the same line, so it looked right. Over eight frames it cuts
+        // visibly across the curve, and if the ball bounced inside that
+        // span the line ran straight through the wall: a path nothing ever
+        // travelled. Walking the recorded positions fixes both at once, and
+        // a bounce now bends the smear by itself - no collision logic, the
+        // buffer simply remembers the corner.
         //
-        // Measured against the LAST DRAWN position, not the last physics
-        // step, so it describes one displayed frame - correct at 60Hz and
-        // still correct at 120.
+        // Sampling at frame rate is enough. Within one 1/60s step gravity
+        // bends the path by a fraction of a pixel; all the visible
+        // curvature comes from spanning SEVERAL frames.
+        //
+        // SHUTTER is a camera's: the fraction of a frame's travel that
+        // smears. Past 1 it is an exposure longer than one frame, which is
+        // how to ask for an obvious ribbon.
         const B = CONFIG.RENDER.BLUR;
-        // Applies while CARRIED as well as in flight. A ball following the
-        // thumb is moving, and the eye does not care whose hand is on it -
-        // the only difference is that a held ball has no interpolation, so
-        // drawX/drawY are simply its position.
-        if (B && B.ENABLED && this.blurPrevX !== undefined) {
-            const dx = drawX - this.blurPrevX, dy = drawY - this.blurPrevY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            const min = B.MIN_TRAVEL_CELLS * game.cellRes;
-            const max = B.MAX_TRAVEL_CELLS * game.cellRes;
-            // Below MIN there is nothing to smear; above MAX something
-            // teleported (a resize, a respawn) and a streak across the
-            // board would be a lie about a journey that never happened.
-            if (dist > min && dist < max) {
-                const k = 1 - Math.max(0, Math.min(1, B.SHUTTER));
-                const backX = this.blurPrevX + dx * k;
-                const backY = this.blurPrevY + dy * k;
-                const prevAlpha = c.globalAlpha;
-                const prevCap = c.lineCap;
+        if (B && B.ENABLED) {
+            if (!this.blurTrail) this.blurTrail = [];
+            this.blurTrail.push({ x: drawX, y: drawY });
+            const cap = ((B.SHUTTER_MAX | 0) || 8) + 2;
+            while (this.blurTrail.length > cap) this.blurTrail.shift();
 
-                // ONE RAMP ACROSS BOTH SHAPES. The capsule and the wedge
-                // share a single gradient running from the ball to the
-                // tail tip, so the alpha is continuous BY CONSTRUCTION.
-                // They used to be lit separately - a solid capsule ending
-                // at 1.0 against a wedge starting at 0.30 - which put a
-                // visible step exactly where the softness was wanted. The
-                // trailing edge of the ball is now a fade, not an edge.
-                const T0 = B.TAIL;
-                const tailLen = (T0 && T0.LENGTH > 0) ? dist * T0.LENGTH : 0;
-                const total = (dist * (1 - k)) + tailLen;
+            const tr = this.blurTrail;
+            const maxSeg = B.MAX_TRAVEL_CELLS * game.cellRes;
+            let remaining = Math.max(0, Math.min(B.SHUTTER_MAX || 8, B.SHUTTER));
+            const pts = [tr[tr.length - 1]];
+            let total = 0;
+            for (let i = tr.length - 1; remaining > 0 && i > 0; i--) {
+                const a = tr[i], p = tr[i - 1];
+                const seg = Math.hypot(a.x - p.x, a.y - p.y);
+                // A segment longer than this is not a journey, it is a
+                // teleport - a pickup, a resize, a respawn. The smear stops
+                // at the last thing that really happened.
+                if (seg > maxSeg) break;
+                if (remaining >= 1) { pts.push(p); total += seg; remaining -= 1; }
+                else {
+                    pts.push({ x: a.x + (p.x - a.x) * remaining,
+                               y: a.y + (p.y - a.y) * remaining });
+                    total += seg * remaining; remaining = 0;
+                }
+            }
+
+            if (pts.length > 1 && total > B.MIN_TRAVEL_CELLS * game.cellRes) {
+                const prevCap = c.lineCap, prevJoin = c.lineJoin;
+                // THE RAMP: full at the ball, SOFTNESS at the far end, so
+                // the trailing edge is a fade rather than a hard round cap.
+                // Laid along the chord from head to tail - for an arc that
+                // is right to within a pixel, and at a bounce it is a
+                // shade approximate, which is a fair price for one fill.
                 let ramp = null;
-                if (total > 0.001 && typeof c.createLinearGradient === 'function') {
-                    const ux0 = dx / dist, uy0 = dy / dist;
-                    ramp = c.createLinearGradient(
-                        drawX, drawY,
-                        drawX - ux0 * total, drawY - uy0 * total);
+                const tail = pts[pts.length - 1];
+                if (typeof c.createLinearGradient === 'function') {
+                    ramp = c.createLinearGradient(pts[0].x, pts[0].y, tail.x, tail.y);
                     if (ramp && typeof ramp.addColorStop === 'function') {
-                        const capEnd = (dist * (1 - k)) / total;
                         ramp.addColorStop(0, Ball._rgba(game.themeColors.BALL, B.ALPHA));
-                        // SOFTNESS is the alpha where the swept region ends.
-                        // 1 restores the old hard capsule; lower blurs the
-                        // trailing edge into the wisp behind it.
-                        ramp.addColorStop(Math.min(0.999, capEnd),
-                            Ball._rgba(game.themeColors.BALL, B.ALPHA * B.SOFTNESS));
-                        ramp.addColorStop(1, Ball._rgba(game.themeColors.BALL, 0));
+                        ramp.addColorStop(1, Ball._rgba(game.themeColors.BALL, B.ALPHA * B.SOFTNESS));
                     } else { ramp = null; }
                 }
-
-                // THE TAIL, drawn FIRST so the solid capsule lands on top.
-                //
-                // A wedge running back from the capsule, narrowing and
-                // fading out. ONE path with ONE gradient fill, deliberately
-                // - a stack of semi-transparent segments would double its
-                // own alpha wherever the segments overlapped, and the
-                // banding that produces is exactly the "gradient-y" look
-                // this is supposed to avoid.
-                //
-                // Its length is a MULTIPLE OF THE FRAME'S TRAVEL, so it is
-                // speed that decides it: nothing at rest, a whisper at a
-                // gentle roll, a real streak on a hard throw. LENGTH is the
-                // dial - 0 is none.
-                const T = B.TAIL;
-                if (T && T.LENGTH > 0) {
-                    const ux = dx / dist, uy = dy / dist;   // travel direction
-                    const px = -uy, py = ux;                // and its normal
-                    const len = dist * T.LENGTH;
-                    const tx = backX - ux * len, ty = backY - uy * len;
-                    const r0 = this.radius, r1 = this.radius * T.TAPER;
-                    // Guarded: a gradient is a cosmetic nicety, and no
-                    // cosmetic nicety is allowed to throw inside the render
-                    // path. Without one, the wedge is skipped and the
-                    // capsule still draws.
-                    if (ramp) {
-                    c.fillStyle = ramp;
-                    c.beginPath();
-                    c.moveTo(backX + px * r0, backY + py * r0);
-                    c.lineTo(backX - px * r0, backY - py * r0);
-                    c.lineTo(tx - px * r1, ty - py * r1);
-                    c.lineTo(tx + px * r1, ty + py * r1);
-                    c.closePath();
-                    c.fill();
-                    }
-                }
-
-                // The swept region, lit by the SAME ramp - so it meets the
-                // wedge at exactly the wedge's own opacity.
                 c.strokeStyle = ramp || game.themeColors.BALL;
-                if (!ramp) c.globalAlpha = prevAlpha * B.ALPHA;
                 c.lineWidth = this.radius * 2;
                 c.lineCap = 'round';
+                c.lineJoin = 'round';   // a bounce corners like the ball does
                 c.beginPath();
-                c.moveTo(backX, backY);
-                c.lineTo(drawX, drawY);
+                c.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
                 c.stroke();
-                c.globalAlpha = prevAlpha;
                 c.lineCap = prevCap;
+                c.lineJoin = prevJoin;
             }
         }
-        this.blurPrevX = drawX;
-        this.blurPrevY = drawY;
+
 
         c.beginPath();
         c.arc(drawX, drawY, this.radius, 0, Math.PI * 2, false);

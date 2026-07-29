@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v74',
+    VERSION: 'v78',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -615,7 +615,8 @@ var CONFIG = {
             // Shutter angle, as a camera would mean it: the fraction of a
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
-            SHUTTER: 0.6,
+            SHUTTER: 1,
+            SHUTTER_MAX: 8,       // ceiling, so a typo cannot paint the court
             ALPHA: 1.0,           // opacity at the ball itself
             // The alpha where the SWEPT REGION ends and the wisp begins.
             // 1.0 is the old hard-edged capsule; lower softens the ball's
@@ -623,18 +624,7 @@ var CONFIG = {
             // blur on the back of the circle" dial.
             SOFTNESS: 0.55,
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
-            MAX_TRAVEL_CELLS: 1.50, // above this something teleported
-
-            // THE TAIL: a wedge running back from the capsule, narrowing
-            // and fading. Length is a MULTIPLE OF THE FRAME'S TRAVEL, so
-            // speed decides it - nothing at rest, a whisper at a roll, a
-            // real streak on a hard throw.
-            TAIL: {
-                LENGTH: 1.2,   // <- THE DIAL. 0 = none, 3 = lots
-                TAPER: 0.30    // tail-end width, as a fraction of the ball
-                               // (opacity now comes from the shared ramp,
-                               //  so there is no separate tail alpha)
-            }
+            MAX_TRAVEL_CELLS: 1.50  // above this something teleported
         },
 
         // The checkerboard. OFF gives a plain field in the theme's own
@@ -650,6 +640,9 @@ var CONFIG = {
         // trial of eight candidates; the cycler that ran that trial is
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
+        // The mute toggle, top-left - opposite the theme toggle.
+        SHOW_MUTE: true,
+
         // WALL TICKS: a short mark at every cell boundary on both walls -
         // the rule for the wall's ladder, made visible. One row is one
         // note, so a tick is exactly where the note changes.
@@ -664,8 +657,9 @@ var CONFIG = {
         // question (measured release scatter is ~0.3 cells), so this may
         // promise a precision nobody can use. Hence the switch.
         WALL_TICKS: {
-            SHOW: true,
-            LENGTH_CELLS: 0.125  // how far each mark reaches into the court
+            SHOW: false,
+            LENGTH_CELLS: 0.125,     // how far the apex reaches into the court
+            HALF_HEIGHT_CELLS: 0.06  // half the base, sitting flat on the wall
         },
 
         // The court's name, bottom-right - the version tag's mirror.

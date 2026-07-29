@@ -11,7 +11,7 @@ function Renderer(game) {
     // During colour transits the colour changes per frame, so the cache
     // rebuilds per frame - no worse than the old direct fillText - while
     // the majority idle frames become nearly free.
-    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' }, share: { key: '' } };
+    this.textCaches = { score: { key: '' }, best: { key: '' }, mode: { key: '' }, version: { key: '' }, captureHint: { key: '' }, seed: { key: '' }, share: { key: '' }, mute: { key: '' } };
 
     // FONT FLASH FIX (v3). History, for honesty: v1 listened to
     // fonts.ready, which raced (faces load lazily; ready resolved before
@@ -117,7 +117,8 @@ Renderer.prototype.drawFrame = function() {
     this.drawScore(game);
     this.drawBestStreak(game);
     this.drawWallTicks(game);    // The wall's ladder, made visible
-    this.drawShareGlyph(game);   // Share the day, top-left
+    this.drawMuteToggle(game);   // Sound on/off, top-left
+    this.drawShareGlyph(game);   // Share the day, top-centre
     this.drawThemeToggle(game);  // Light/dark glyph, top-right (product feature)
     this.drawVersionTag(game);
     this.drawSeedTag(game);   // Deploy verification, bottom-left cell
@@ -474,34 +475,76 @@ Renderer.prototype.drawWallTicks = function(game) {
     if (!W || !W.SHOW) return;
     const c = this.c;
     const len = W.LENGTH_CELLS * game.cellRes;
+    const half = (W.HALF_HEIGHT_CELLS || 0.06) * game.cellRes;
     const right = game.COLUMNS * game.cellRes;
     c.beginPath();
-    c.strokeStyle = game.themeColors.BOUNDARY;
-    c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+    c.fillStyle = game.themeColors.BOUNDARY;
+    // SOLID TRIANGLES, base flat on the wall and apex pointing INTO the
+    // court - a mark that says "here", and says which way is in. One path,
+    // one fill, so twenty marks cost one draw.
+    //
     // Internal boundaries only: the floor and the ceiling are not places
     // the note changes, they are where the world stops.
     for (let row = 1; row < game.ROWS; row++) {
         const y = row * game.cellRes;
-        c.moveTo(0, y);        c.lineTo(len, y);          // reaching in from the left
-        c.moveTo(right, y);    c.lineTo(right - len, y);  // ...and from the right
+        c.moveTo(0, y - half);  c.lineTo(0, y + half);  c.lineTo(len, y);
+        c.closePath();
+        c.moveTo(right, y - half); c.lineTo(right, y + half); c.lineTo(right - len, y);
+        c.closePath();
     }
-    c.stroke();
+    c.fill();
 };
 
 /**
- * THE SHARE GLYPH, top-left - the mirror of the theme toggle, in the
- * corner the retired scheme label and font cycler used to occupy.
+ * THE MUTE TOGGLE, top-left - opposite the theme toggle, same lattice cell,
+ * same register.
+ *
+ * SHOWS THE CURRENT STATE, NOT THE DESTINATION - deliberately the opposite
+ * of the theme glyph beside it, and for a reason. The theme's state IS the
+ * entire screen, so a glyph repeating it says nothing; silence looks
+ * exactly like sound nobody has triggered yet. With no ambient display to
+ * read, the glyph has to BE the display - and a struck-through note meaning
+ * "you are muted" is the reading every other piece of software on the
+ * device has already taught.
+ *
+ * A placeholder mark: a note, and a stroke through it when silent.
+ */
+Renderer.prototype.drawMuteToggle = function(game) {
+    if (!CONFIG.RENDER.SHOW_MUTE) return;
+    const c = this.c;
+    const muted = (typeof Audio !== 'undefined' && Audio.isMuted) ? Audio.isMuted() : false;
+    const cached = this.getCachedText('mute', '\u266A', CONFIG.RENDER.WEIGHT_LABEL,
+        game.cellRes * 0.5, game.themeColors.BEST);
+    const cx = 0.5 * game.cellRes;
+    const cy = game.viewTopY + 0.5 * game.cellRes;
+    c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
+    if (muted) {
+        const r0 = game.cellRes * 0.22;
+        c.beginPath();
+        c.strokeStyle = game.themeColors.BEST;
+        c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+        c.moveTo(cx - r0, cy + r0);
+        c.lineTo(cx + r0, cy - r0);
+        c.stroke();
+    }
+};
+
+/**
+ * THE SHARE GLYPH, TOP-CENTRE - between the two toggles, in the one top
+ * cell neither of them owns.
  *
  * Hidden until there is a result: a first-time player sees nothing to
  * explain, exactly like the record label. Hidden on custom courts too,
- * because exhibition play keeps no ledger and so has nothing to share.
+ * because exhibition play keeps no ledger and so has nothing to share -
+ * which is also why it never collides with the capture counter that sits
+ * just below this spot.
  */
 Renderer.prototype.drawShareGlyph = function(game) {
     if (!CONFIG.SHARE.SHOW_GLYPH) return;
     if (typeof Share === 'undefined' || !Share.hasResult(game)) return;
     const cached = this.getCachedText('share', '\u2197', CONFIG.RENDER.WEIGHT_LABEL,
         game.cellRes * 0.5, game.themeColors.BEST);
-    const cx = 0.5 * game.cellRes;
+    const cx = (game.COLUMNS / 2) * game.cellRes;
     const cy = game.viewTopY + 0.5 * game.cellRes;
     this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
 };
