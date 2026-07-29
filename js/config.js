@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v79',
+    VERSION: 'v81',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -145,6 +145,22 @@ var CONFIG = {
         // be drawn somewhere it cannot be hit - the exact lie the honesty
         // line forbids - so this exists to MEASURE the difference, not to
         // ship the falsehood.
+        // THE STRING PULLS. Taut at rest; stretched, it drags the far post
+        // along. A cable pulls and never pushes, so this is silent when a
+        // post is knocked INWARD or straight down, and speaks when one is
+        // pushed outward - which is exactly the shot that clipped the rim.
+        //
+        // STIFFNESS_HZ is in the same units as the pegs' own spring, and
+        // the two together say how far the far post follows:
+        //      ratio = wt^2 / (wt^2 + wp^2)
+        // At 8 against 11 that is ~35% - the far post answers clearly, and
+        // clearly less. Raise it toward the peg frequency for a stiffer,
+        // more rigid-feeling hoop; drop it for a lazier one.
+        STRING_TENSION: {
+            ENABLED: true,
+            STIFFNESS_HZ: 8
+        },
+
         PEG_GIVE: {
             ENABLED: true,
             MAX_CELLS: 0.05,      // peak displacement at a REF_IMPACT blow.
@@ -644,14 +660,14 @@ var CONFIG = {
             // Shutter angle, as a camera would mean it: the fraction of a
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
-            SHUTTER: 0.5,
+            SHUTTER: 1,
             SHUTTER_MAX: 8,       // ceiling, so a typo cannot paint the court
             ALPHA: 1.0,           // opacity at the ball itself
             // The alpha where the SWEPT REGION ends and the wisp begins.
             // 1.0 is the old hard-edged capsule; lower softens the ball's
             // trailing edge into the tail behind it. THIS is the "slight
             // blur on the back of the circle" dial.
-            SOFTNESS: 1,
+            SOFTNESS: 0.55,
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
             MAX_TRAVEL_CELLS: 1.50  // above this something teleported
         },

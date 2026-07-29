@@ -17,6 +17,68 @@ class Hoop {
     }
 
     /**
+     * THE CABLE PULLS. Until now the string stretched to wherever the pegs
+     * happened to be and exerted nothing back - drawn as a physical object,
+     * behaving as though it were not one. Now it is taut at rest and pulls
+     * when stretched, so the hoop is ONE THING WITH FLEX rather than two
+     * posts and an infinitely elastic line.
+     *
+     * A CABLE PULLS BUT NEVER PUSHES. Move one post toward the other and
+     * the string goes slack and transmits nothing; move it away and the
+     * string tightens and drags its partner along. That asymmetry is real,
+     * not a simplification, and it decides where this effect shows up:
+     *
+     *   - a ball landing ON a post displaces it VERTICALLY, transverse to
+     *     the string. The chord barely changes (d^2/2L: about 0.0004 cells
+     *     for a 0.05-cell knock on a 3-cell hoop), so the post dips alone.
+     *   - a ball clipping the INSIDE of a post on its way through pushes it
+     *     OUTWARD. The string tightens, the far post is pulled in, and the
+     *     hoop flinches as a unit and briefly narrows.
+     *
+     * So it is silent on ordinary contacts and speaks on the shots that
+     * shaved the rim - the near-miss, arrived at by modelling the object
+     * honestly rather than by detecting anything.
+     *
+     * TENSION IS AN INTERNAL FORCE and therefore cannot move the pair's
+     * centre of mass; only the ball may do that. The impulses below are
+     * exactly equal and opposite, which is asserted rather than hoped for.
+     *
+     * OPERATOR SPLITTING: the tension impulse is applied here, then the
+     * pegs' own springs are advanced exactly (spring.js). Splitting a
+     * forced oscillator this way is first-order in dt while keeping the
+     * unforced part exact - the honest trade, since the coupling is
+     * one-sided and nonlinear and has no closed form worth chasing.
+     *
+     * @param {number} dt - Fixed step, seconds.
+     */
+    stepTension(dt) {
+        const T = CONFIG.MOTION.STRING_TENSION;
+        if (!T || !T.ENABLED) return;
+        const a = this.node1, b = this.node2;
+        if (!a || !b || a.homeX === undefined) return;
+
+        // Taut at rest: the rest length IS the distance between homes.
+        const restX = b.homeX - a.homeX, restY = b.homeY - a.homeY;
+        const rest = Math.sqrt(restX * restX + restY * restY);
+        if (!(rest > 0)) return;
+
+        const dx = b.pixelX - a.pixelX, dy = b.pixelY - a.pixelY;
+        const chord = Math.sqrt(dx * dx + dy * dy);
+        const ext = chord - rest;
+        if (ext <= 0 || chord <= 0) return;   // slack: a cable never pushes
+
+        // Stiffness as an angular frequency, in the pegs' own units - so
+        // STIFFNESS_HZ against PEG_GIVE.FREQ_HZ reads directly as how far
+        // the far post follows: ratio = wt^2 / (wt^2 + wp^2).
+        const wt = 2 * Math.PI * T.STIFFNESS_HZ;
+        const dv = wt * wt * ext * dt;
+        const ux = dx / chord, uy = dy / chord;
+
+        a.velX += ux * dv;  a.velY += uy * dv;   // A pulled toward B
+        b.velX -= ux * dv;  b.velY -= uy * dv;   // ...B toward A, exactly
+    }
+
+    /**
      * THE PLUCK. The ball has passed through, and the line behaves like the
      * string it sounds like.
      *
@@ -142,6 +204,9 @@ class Hoop {
     }
 
     resizeUpdate(game) {
-        this.pixelY = y; // Update cached Y after node resize
+        // The cached scoring height is the MEAN of the two posts - the same
+        // definition draw() uses, so a tilted hoop is scored at its middle
+        // whether or not a frame has been drawn since the resize.
+        this.pixelY = (this.node1.pixelY + this.node2.pixelY) / 2;
     }
 }

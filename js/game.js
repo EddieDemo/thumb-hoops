@@ -438,6 +438,12 @@ Game.prototype.animate = function(timestamp) {
             // else. Stepped before the ball, so a peg struck last step has
             // already moved by the time this step tests against it - the
             // ball meets the peg where the peg now is.
+            // The string pulls FIRST, then the posts move. Splitting it
+            // this way keeps the springs' exact solution intact while the
+            // coupling rides on top as an impulse.
+            for (let i = 0; i < this.lines.length; i++) {
+                if (this.lines[i].stepTension) this.lines[i].stepTension(stepDuration);
+            }
             for (let i = 0; i < this.nodes.length; i++) this.nodes[i].stepSpring(stepDuration);
             this.stepSimulation();
             this.accumulator -= stepDuration;
