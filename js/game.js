@@ -415,10 +415,16 @@ Game.prototype.animate = function(timestamp) {
     // The persistent ball can be mid-settle in ANY state (the intro drop,
     // a post-round bounce, a set-down): step whenever a dynamic ball exists.
     const anyDynamicBall = this.balls.some(b => !b.isStatic && !b.sleeping);
+    // ...and a struck peg is the world moving too. Without this a peg hit
+    // on the shot that ends a round would freeze mid-swing the instant the
+    // ball fell asleep, and stay bent until something else woke the clock.
+    // The world steps while ANYTHING in it is still moving.
+    const anyPegAwake = this.nodes.some(n =>
+        n.offX !== 0 || n.offY !== 0 || n.velX !== 0 || n.velY !== 0);
     const inPhysicsState =
         this.currentState === GameStates.SHOT_TAKEN ||
         this.currentState === GameStates.RESETTING ||
-        anyDynamicBall;
+        anyDynamicBall || anyPegAwake;
 
     if (inPhysicsState) {
         this.accumulator += this.deltaTime;
@@ -428,6 +434,11 @@ Game.prototype.animate = function(timestamp) {
         let stepsTaken = 0;
 
         while (this.accumulator >= stepDuration && stepsTaken < maxSteps) {
+            // The pegs return home on the SAME fixed clock as everything
+            // else. Stepped before the ball, so a peg struck last step has
+            // already moved by the time this step tests against it - the
+            // ball meets the peg where the peg now is.
+            for (let i = 0; i < this.nodes.length; i++) this.nodes[i].stepSpring(stepDuration);
             this.stepSimulation();
             this.accumulator -= stepDuration;
             stepsTaken++;

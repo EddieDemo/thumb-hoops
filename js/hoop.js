@@ -86,8 +86,12 @@ class Hoop {
     draw(game) {
         const c = game.c;
         const M = CONFIG.MOTION;
+        // The line is STRUNG BETWEEN THE PEGS, so it hangs from wherever
+        // they are. Strike one post and the string tilts with it - not a
+        // second effect, just the consequence of the anchors being real.
         const x1 = this.node1.pixelX, x2 = this.node2.pixelX;
-        const y = this.node1.pixelY;
+        const y1 = this.node1.pixelY, y2 = this.node2.pixelY;
+        const y = (y1 + y2) / 2;   // the cached scoring height: the mean
 
         const exit = game.getElementExitT();
         let presence;
@@ -98,7 +102,7 @@ class Hoop {
             presence = Motion.easeOutCubic(
                 Motion.progress(age, M.LINE_DELAY_MS / 1000, M.LINE_DRAW_MS / 1000));
         }
-        if (presence <= 0.001) { this.pixelY = this.node1.pixelY; return; }
+        if (presence <= 0.001) { this.pixelY = y; return; }
 
         const prevAlpha = c.globalAlpha;
         c.globalAlpha = prevAlpha * presence;
@@ -120,23 +124,24 @@ class Hoop {
             const t = game.worldTime - this.plucked.t0;
             const span = x2 - x1;
             const N = P.SAMPLES;
-            c.moveTo(x1, y);
+            const rise = y2 - y1;
+            c.moveTo(x1, y1);
             for (let i = 1; i <= N; i++) {
                 const s = i / N;
-                c.lineTo(x1 + span * s, y + this._plucked_y(s, t));
+                c.lineTo(x1 + span * s, y1 + rise * s + this._plucked_y(s, t));
             }
         } else {
-            c.moveTo(x1, y);
-            c.lineTo(x2, y);
+            c.moveTo(x1, y1);
+            c.lineTo(x2, y2);
         }
 
         c.stroke();
         c.globalAlpha = prevAlpha;
 
-        this.pixelY = this.node1.pixelY; // Update cached Y
+        this.pixelY = y; // Update cached Y
     }
 
     resizeUpdate(game) {
-        this.pixelY = this.node1.pixelY; // Update cached Y after node resize
+        this.pixelY = y; // Update cached Y after node resize
     }
 }

@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v78',
+    VERSION: 'v79',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -132,6 +132,35 @@ var CONFIG = {
     },
 
     MOTION: {
+
+        // PEG GIVE. The pegs are sprung, not welded: struck, they move, and
+        // ring home. NOT a near-miss detector - it is a property of the
+        // OBJECT, so any contact from any direction moves it, in proportion
+        // to how hard it was hit and along the normal it was hit on. A shot
+        // that shaves a post now looks different from one that misses by a
+        // mile, and nothing had to notice or judge that for it to be true.
+        //
+        // COLLIDES: the pegs' displaced position IS their collision
+        // position (there is only one pixelX). Set false and the peg would
+        // be drawn somewhere it cannot be hit - the exact lie the honesty
+        // line forbids - so this exists to MEASURE the difference, not to
+        // ship the falsehood.
+        PEG_GIVE: {
+            ENABLED: true,
+            MAX_CELLS: 0.05,      // peak displacement at a REF_IMPACT blow.
+                                  // A true peak, not a force constant.
+            REF_IMPACT: 0.55,     // the approach speed that earns the full
+                                  // give (cells/step)
+            MIN_IMPACT: 0.06,     // below this nothing moves: a graze is
+                                  // not a blow, and a twitching peg is noise
+            FREQ_HZ: 11,          // ~90ms per swing: quick, but followable
+            DAMPING: 0.40,        // zeta. 0.4 = ~25% overshoot: ONE visible
+                                  // wobble. 1.0 looks correct and dead;
+                                  // 0.2 looks like jelly.
+            MAX_OFFSET_CELLS: 0.14, // hard ceiling; geometry is not negotiable
+            SLEEP_CELLS: 0.0015   // below this it snaps home and sleeps
+        },
+
 
         // THE PLUCK (see hoop.js). The hoop line behaves like the string it
         // sounds like: displaced where the ball crossed, then ringing down
@@ -615,14 +644,14 @@ var CONFIG = {
             // Shutter angle, as a camera would mean it: the fraction of a
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
-            SHUTTER: 0.25,
+            SHUTTER: 0.5,
             SHUTTER_MAX: 8,       // ceiling, so a typo cannot paint the court
             ALPHA: 1.0,           // opacity at the ball itself
             // The alpha where the SWEPT REGION ends and the wisp begins.
             // 1.0 is the old hard-edged capsule; lower softens the ball's
             // trailing edge into the tail behind it. THIS is the "slight
             // blur on the back of the circle" dial.
-            SOFTNESS: 1, //0.55
+            SOFTNESS: 1,
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
             MAX_TRAVEL_CELLS: 1.50  // above this something teleported
         },

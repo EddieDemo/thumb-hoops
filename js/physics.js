@@ -43,6 +43,17 @@ PhysicsEngine.prototype.update = function(deltaSteps, dynamicObjects) {
         // Route impact DATA to the game for feedback (haptics now; sound and
         // visual effects will hook the same seam). Live simulation only -
         // simulateTrajectory never reaches this code.
+        // The pegs give. Applied HERE - in the live step, never in
+        // simulateTrajectory - and before the feedback hop below, so a peg
+        // has already begun moving on the frame it was struck.
+        if (result.pegStrikes) {
+            const cell = this.game.cellRes || 1;
+            for (let i = 0; i < result.pegStrikes.length; i++) {
+                const s = result.pegStrikes[i];
+                if (s.node && s.node.strike) s.node.strike(s.nx, s.ny, s.speed / cell);
+            }
+        }
+
         if (result.wallImpact > 0 || result.pegImpact > 0 || result.floorImpact > 0) {
             this.game.onBallImpact(result);
         }
@@ -86,6 +97,8 @@ PhysicsEngine.prototype.stepBallState = function(state) {
     const r = state.radius || 0;
     let wallImpact = 0; // Contact speed against a wall this step (px/step)
     let pegImpact = 0;  // Strongest peg contact speed this step (px/step)
+    let pegStrikes = null; // Which pegs were struck, and how - allocated
+                           // lazily, because most steps touch nothing.
     let pegX = 0;       // ...and that peg's x, which decides its pitch
     let wallY = 0;      // Height of a wall contact - the walls are a ladder too
 
@@ -161,6 +174,13 @@ PhysicsEngine.prototype.stepBallState = function(state) {
                     // a step is voiced, so the x follows that same maximum.
                     if (-vDotN > pegImpact) pegX = node.pixelX;
                     pegImpact = Math.max(pegImpact, -vDotN); // Approach speed
+                    // THE SAME IMPULSE, the other way. Reported, not
+                    // applied: this function is shared with prediction, and
+                    // predictions must never move the world. The live
+                    // simulation hands these to the pegs; simulateTrajectory
+                    // drops them, exactly as it drops the sounds.
+                    if (!pegStrikes) pegStrikes = [];
+                    pegStrikes.push({ node: node, nx: -nx, ny: -ny, speed: -vDotN });
                     state.velocity.x -= (1 + pegE) * vDotN * nx;
                     state.velocity.y -= (1 + pegE) * vDotN * ny;
                 }
@@ -175,7 +195,8 @@ PhysicsEngine.prototype.stepBallState = function(state) {
     }
 
     return { hitFloor: hitFloor, wallImpact: wallImpact, pegImpact: pegImpact,
-             pegX: pegX, wallY: wallY, floorImpact: floorImpact };
+             pegX: pegX, wallY: wallY, floorImpact: floorImpact,
+             pegStrikes: pegStrikes };
 };
 
 /**
