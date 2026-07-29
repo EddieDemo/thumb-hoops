@@ -615,14 +615,14 @@ var CONFIG = {
             // Shutter angle, as a camera would mean it: the fraction of a
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
-            SHUTTER: 1,
+            SHUTTER: 0.25,
             SHUTTER_MAX: 8,       // ceiling, so a typo cannot paint the court
             ALPHA: 1.0,           // opacity at the ball itself
             // The alpha where the SWEPT REGION ends and the wisp begins.
             // 1.0 is the old hard-edged capsule; lower softens the ball's
             // trailing edge into the tail behind it. THIS is the "slight
             // blur on the back of the circle" dial.
-            SOFTNESS: 0.55,
+            SOFTNESS: 1, //0.55
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
             MAX_TRAVEL_CELLS: 1.50  // above this something teleported
         },
