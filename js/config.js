@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v85',
+    VERSION: 'v86',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -439,10 +439,13 @@ var CONFIG = {
     // desktop already renders - no custom font, no image.
     SHARE: {
         TITLE: 'Thumb-Hoops',
-        MADE: '\u25cf',      // filled circle - a basket
-        MISSED: '\u25cb',    // hollow circle - a miss
+        // A day is a sequence of RUNS, and the shape of that sequence is
+        // the story. Two lines: bars to be SEEN, numbers to be READ. The
+        // second is the legend for the first, so neither needs explaining.
+        SPARK: '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588',  // block elements, low to full
+        RUN_SEP: '\u00b7',   // middle dot between the numbers
         TRIM_MARK: '\u2026', // ellipsis, when a long day is trimmed
-        MAX_GLYPHS: 40,      // beyond this the front is dropped: the ENDING
+        MAX_RUNS: 24,        // beyond this the FRONT is dropped: the ending
                              // is the part that matters, and a chat message
                              // should stay one screen
         SHOW_GLYPH: true,    // the tap affordance, top-left

@@ -52,20 +52,58 @@ var Share = (function() {
     }
 
     /**
-     * The day's shape: one glyph per attempt, up to and including the
-     * summit. Long days are trimmed from the FRONT (keeping the ending,
-     * which is the part that matters) with a leading ellipsis.
+     * The day as a list of RUN LENGTHS. A miss ends a run, so a day is a
+     * sequence of runs - 3, then 2, then 7 - and that sequence is the shape
+     * of the struggle: where the wall was, whether you warmed up or faded,
+     * whether the summit came early or after a fight.
+     *
+     * A run of 0 is a miss with nothing before it, and it stays in the
+     * list: "I missed three straight before I scored" is part of the day.
+     *
+     * Because the sequence is truncated at the summit, the LAST run is the
+     * best one and every earlier run cost exactly one miss - so
+     * `runs.length - 1` IS the cost printed above. The two lines cannot
+     * disagree; they are the same fact counted twice.
      */
-    function shapeOf(seq) {
-        const S = CONFIG.SHARE;
-        if (!seq || !seq.length) return '';
-        let cut = seq;
-        let prefix = '';
-        if (seq.length > S.MAX_GLYPHS) {
-            cut = seq.slice(seq.length - S.MAX_GLYPHS);
-            prefix = S.TRIM_MARK;
+    function runsOf(seq) {
+        if (!seq || !seq.length) return [];
+        const runs = [];
+        let n = 0;
+        for (let i = 0; i < seq.length; i++) {
+            if (seq[i]) n++;
+            else { runs.push(n); n = 0; }
         }
-        return prefix + cut.map(v => (v ? S.MADE : S.MISSED)).join('');
+        runs.push(n);            // the run in progress at the summit
+        return runs;
+    }
+
+    /** Long days are trimmed from the FRONT: the ending is what matters. */
+    function trimRuns(runs) {
+        const S = CONFIG.SHARE;
+        return (runs.length > S.MAX_RUNS)
+            ? { runs: runs.slice(runs.length - S.MAX_RUNS), trimmed: true }
+            : { runs: runs, trimmed: false };
+    }
+
+    /**
+     * One block per run, scaled to the day's own best. Seen rather than
+     * read - the summit is simply the tallest bar - and eight characters
+     * where the old per-attempt dots needed forty.
+     */
+    function sparkOf(runs) {
+        const S = CONFIG.SHARE;
+        if (!runs.length) return '';
+        const blocks = S.SPARK;
+        const top = Math.max.apply(null, runs);
+        return runs.map(v => {
+            const t = (top > 0) ? v / top : 0;
+            return blocks[Math.min(blocks.length - 1, Math.round(t * (blocks.length - 1)))];
+        }).join('');
+    }
+
+    /** The same runs as numbers, for anyone who wants the detail. */
+    function digitsOf(runs) {
+        return runs.join(CONFIG.SHARE.RUN_SEP);
     }
 
     /**
@@ -85,8 +123,19 @@ var Share = (function() {
         // noShape: a day that was already underway when shape-recording
         // arrived. It keeps its numbers and forgoes the picture (see the
         // migration note in game.js) rather than draw one that disagrees.
-        const shape = d.noShape ? '' : shapeOf(d.seqAtBest);
-        if (shape) lines.push('', shape);
+        // noShape: a day already underway when shape-recording arrived. It
+        // keeps its numbers and forgoes the picture (see the migration note
+        // in game.js) rather than draw one that disagrees.
+        if (!d.noShape) {
+            const t = trimRuns(runsOf(d.seqAtBest));
+            if (t.runs.length) {
+                const mark = t.trimmed ? CONFIG.SHARE.TRIM_MARK : '';
+                // The bars for the eye, the numbers for the curious. Two
+                // short lines, and neither needs a legend because the
+                // second explains the first.
+                lines.push('', mark + sparkOf(t.runs), mark + digitsOf(t.runs));
+            }
+        }
         lines.push('', courtURL(game));
         return lines.join('\n');
     }
@@ -147,6 +196,8 @@ var Share = (function() {
         shareDaily: shareDaily,
         hasResult: hasResult,
         prettyDate: prettyDate,
-        shapeOf: shapeOf
+        runsOf: runsOf,
+        sparkOf: sparkOf,
+        digitsOf: digitsOf
     };
 })();
