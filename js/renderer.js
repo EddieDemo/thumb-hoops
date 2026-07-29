@@ -45,9 +45,19 @@ function Renderer(game) {
  * crispness; drawn back at logical size.
  * @returns {{canvas: HTMLCanvasElement, w: number, h: number}}
  */
-Renderer.prototype.getCachedText = function(cacheName, text, weight, px, color) {
+/**
+ * @param {boolean} [optical] - Centre on the glyph's INK rather than on its
+ *        advance box. A typeface's metrics describe how glyphs SET NEXT TO
+ *        EACH OTHER, which is the wrong question for a lone mark in a
+ *        corner: an eighth note carries its weight in the notehead at the
+ *        lower left, an arrow along its diagonal, a circle nowhere in
+ *        particular. Centred by metrics they sit at four different heights
+ *        and read as sloppy. Measured and centred on the ink, they line up.
+ *        Measured, not tuned - swap a glyph and it stays aligned.
+ */
+Renderer.prototype.getCachedText = function(cacheName, text, weight, px, color, optical) {
     const cache = this.textCaches[cacheName];
-    const key = text + '|' + color + '|' + px + '|' + weight;
+    const key = text + '|' + color + '|' + px + '|' + weight + (optical ? '|o' : '');
     if (cache.key === key && cache.canvas) return cache;
 
     const dpr = window.devicePixelRatio || 1;
@@ -73,7 +83,64 @@ Renderer.prototype.getCachedText = function(cacheName, text, weight, px, color) 
     cache.key = key;
     cache.w = w;
     cache.h = h;
+    // Where to hold the canvas so the requested point lands on the glyph's
+    // middle. Metrics by default; the ink's own centre when asked.
+    cache.cx = w / 2;
+    cache.cy = h / 2;
+    if (optical) {
+        const ink = inkCentre(ctx, canvas, dpr);
+        if (ink) { cache.cx = ink.x; cache.cy = ink.y; }
+    }
     return cache;
+};
+
+/**
+ * The centre of the drawn pixels, in logical units. Walks the alpha channel
+ * for the extremes. Returns null if the pixels cannot be read (a tainted or
+ * stubbed context) - the caller then falls back to the metric centre, so a
+ * missing capability costs alignment, never a frame.
+ */
+function inkCentre(ctx, canvas, dpr) {
+    let data;
+    try {
+        if (typeof ctx.getImageData !== 'function') return null;
+        data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        if (!data || !data.length) return null;
+    } catch (e) { return null; }
+
+    const W = canvas.width, H = canvas.height;
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) {
+        const row = y * W * 4;
+        for (let x = 0; x < W; x++) {
+            if (data[row + x * 4 + 3] > 8) {   // 8/255: ignore antialiasing dust
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    if (maxX < 0) return null;   // nothing drawn
+    return { x: (minX + maxX + 1) / 2 / dpr, y: (minY + maxY + 1) / 2 / dpr };
+}
+
+/**
+ * THE TOP ROW, from one ordered list. Evenly spread between equal margins,
+ * so adding or removing a control respaces the rest instead of leaving a
+ * hole - and the order lives in the config as an order, not as four
+ * scattered coordinates that have to be kept consistent by hand.
+ */
+Renderer.glyphX = function(game, id) {
+    const R = CONFIG.RENDER.GLYPH_ROW;
+    const row = R.ORDER;
+    const i = row.indexOf(id);
+    const span = game.COLUMNS - 2 * R.MARGIN_CELLS;
+    const step = (row.length > 1) ? span / (row.length - 1) : 0;
+    return (R.MARGIN_CELLS + (i < 0 ? 0 : i) * step) * game.cellRes;
+};
+Renderer.glyphY = function(game) {
+    return game.viewTopY + CONFIG.RENDER.GLYPH_ROW.ROW_CELLS * game.cellRes;
 };
 
 Renderer.prototype.drawFrame = function() {
@@ -317,13 +384,13 @@ Renderer.prototype.drawThemeToggle = function(game) {
     // light court -> moon (tap for dark).
     const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u2739' : '\u23FE';
     const cached = this.getCachedText('mode', glyph, CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL);
+        game.cellRes * 0.5, game.themeColors.CONTROL, true);
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
     // lattice, not to a floating margin.
-    const centerX = (game.COLUMNS - 0.5) * game.cellRes;
-    const centerY = game.viewTopY + 0.5 * game.cellRes;
+    const centerX = Renderer.glyphX(game, 'theme');
+    const centerY = Renderer.glyphY(game);
     this.c.drawImage(cached.canvas,
-        centerX - cached.w / 2, centerY - cached.h / 2, cached.w, cached.h);
+        centerX - cached.cx, centerY - cached.cy, cached.w, cached.h);
 };
 
 // --- Other Renderer Methods ---
@@ -515,10 +582,10 @@ Renderer.prototype.drawMuteToggle = function(game) {
     const c = this.c;
     const muted = (typeof Audio !== 'undefined' && Audio.isMuted) ? Audio.isMuted() : false;
     const cached = this.getCachedText('mute', '\u266A', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL);
-    const cx = 0.5 * game.cellRes;
-    const cy = game.viewTopY + 0.5 * game.cellRes;
-    c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
+        game.cellRes * 0.5, game.themeColors.CONTROL, true);
+    const cx = Renderer.glyphX(game, 'mute');
+    const cy = Renderer.glyphY(game);
+    c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);
     if (muted) {
         const r0 = game.cellRes * 0.22;
         c.beginPath();
@@ -552,10 +619,10 @@ Renderer.prototype.drawContrastToggle = function(game) {
     const step = (typeof contrastStep === 'function') ? contrastStep() : 0;
     const glyph = GLYPHS[Math.round(step * (GLYPHS.length - 1))] || GLYPHS[0];
     const cached = this.getCachedText('contrast', glyph,
-        CONFIG.RENDER.WEIGHT_LABEL, game.cellRes * 0.5, game.themeColors.CONTRAST_DOOR);
-    const cx = (game.COLUMNS - 1.5) * game.cellRes;
-    const cy = game.viewTopY + 0.5 * game.cellRes;
-    this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
+        CONFIG.RENDER.WEIGHT_LABEL, game.cellRes * 0.5, game.themeColors.CONTRAST_DOOR, true);
+    const cx = Renderer.glyphX(game, 'contrast');
+    const cy = Renderer.glyphY(game);
+    this.c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);
 };
 
 /**
@@ -572,10 +639,10 @@ Renderer.prototype.drawShareGlyph = function(game) {
     if (!CONFIG.SHARE.SHOW_GLYPH) return;
     if (typeof Share === 'undefined' || !Share.hasResult(game)) return;
     const cached = this.getCachedText('share', '\u2197', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL);
-    const cx = (game.COLUMNS / 2) * game.cellRes;
-    const cy = game.viewTopY + 0.5 * game.cellRes;
-    this.c.drawImage(cached.canvas, cx - cached.w / 2, cy - cached.h / 2, cached.w, cached.h);
+        game.cellRes * 0.5, game.themeColors.CONTROL, true);
+    const cx = Renderer.glyphX(game, 'share');
+    const cy = Renderer.glyphY(game);
+    this.c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);
 };
 
 /**

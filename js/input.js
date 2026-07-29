@@ -250,7 +250,8 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // MUTE: top-LEFT. Checked before anything else in the band, because it
     // is the one control a player reaches for URGENTLY - in a quiet room,
     // on a train, with someone asleep next door.
-    if (CONFIG.RENDER.SHOW_MUTE && topBand && pos.x < this.game.cellRes * 1.4) {
+    if (CONFIG.RENDER.SHOW_MUTE && topBand &&
+        Math.abs(pos.x - Renderer.glyphX(this.game, 'mute')) < this.game.cellRes * 0.7) {
         dbg('InputHandler: Mute toggled.');
         if (typeof Audio !== 'undefined' && Audio.toggleMuted) Audio.toggleMuted();
         return;
@@ -260,7 +261,7 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // never swallow a tap for nothing.
     if (CONFIG.SHARE.SHOW_GLYPH && typeof Share !== 'undefined' &&
         Share.hasResult(this.game) && topBand &&
-        Math.abs(pos.x - (this.game.COLUMNS / 2) * this.game.cellRes) < this.game.cellRes * 0.7) {
+        Math.abs(pos.x - Renderer.glyphX(this.game, 'share')) < this.game.cellRes * 0.7) {
         dbg('InputHandler: Share tapped.');
         Share.shareDaily(this.game);
         return;
@@ -269,7 +270,7 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // CONTRAST: left of the theme glyph. The door to the accessible
     // preset, and always drawn so it can be found.
     if (CONFIG.RENDER.SHOW_CONTRAST_TOGGLE && topBand &&
-        Math.abs(pos.x - (this.game.COLUMNS - 1.5) * this.game.cellRes) < this.game.cellRes * 0.7) {
+        Math.abs(pos.x - Renderer.glyphX(this.game, 'contrast')) < this.game.cellRes * 0.7) {
         dbg('InputHandler: Contrast toggled.');
         if (typeof toggleContrast === 'function') toggleContrast();
         return;
@@ -281,9 +282,8 @@ InputHandler.prototype.handlePointerDown = function(event) {
     // Before the camera existed these were the same thing; once the sky
     // could be cropped they diverged, and the glyph became untappable in
     // any context that crops (browser yes, home-screen app no).
-    if (pos.x > this.game.COLUMNS * this.game.cellRes - this.game.cellRes * 1.6 &&
-        pos.y > this.game.viewTopY &&
-        pos.y < this.game.viewTopY + this.game.cellRes * 1.4) {
+    if (topBand &&
+        Math.abs(pos.x - Renderer.glyphX(this.game, 'theme')) < this.game.cellRes * 0.7) {
         dbg('InputHandler: Theme toggle tapped.');
         toggleDarkMode();
         return;

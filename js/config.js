@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v84',
+    VERSION: 'v85',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -685,10 +685,20 @@ var CONFIG = {
         // trial of eight candidates; the cycler that ran that trial is
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
-        // The mute toggle, top-left - opposite the theme toggle.
         SHOW_MUTE: true,
-        // The contrast toggle, left of the theme glyph.
         SHOW_CONTRAST_TOGGLE: true,
+
+        // THE TOP ROW. One ordered list, evenly spread between equal
+        // margins - so the order is stated once, and adding or removing a
+        // control respaces the others rather than leaving a gap. Each glyph
+        // is centred on its own INK (see getCachedText's `optical`), not on
+        // its advance box, so a notehead, an arrow and a circle line up
+        // instead of sitting at three different heights.
+        GLYPH_ROW: {
+            ORDER: ['contrast', 'theme', 'mute', 'share'],
+            MARGIN_CELLS: 0.5,   // inset of the outermost glyphs
+            ROW_CELLS: 0.5       // height below the visible top
+        },
 
         // WALL TICKS: a short mark at every cell boundary on both walls -
         // the rule for the wall's ladder, made visible. One row is one
