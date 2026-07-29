@@ -170,7 +170,7 @@ class Hoop {
         c.globalAlpha = prevAlpha * presence;
         c.beginPath();
         c.strokeStyle = game.themeColors.HOOP;
-        c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+        c.lineWidth = Renderer.lineW(game, CONFIG.RENDER.HOOP_LINE_WIDTH);
 
         const P = CONFIG.MOTION.PLUCK;
         let ringing = false;

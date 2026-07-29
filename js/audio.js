@@ -47,6 +47,7 @@ var Audio = (function() {
     let ctx = null;
     let master = null;
     let ready = false;          // buffers rendered
+    let rendering = false;      // ...or being rendered right now
     let failed = false;         // this device can't, and that's fine
     let voices = null;          // { pegSoft, pegHard, gong }
     let lastStrikeAt = -Infinity;   // pegs
@@ -231,7 +232,37 @@ var Audio = (function() {
      * Must be called from inside a user gesture: browsers refuse to start
      * an AudioContext otherwise. Safe to call repeatedly.
      */
+    /**
+     * CAST THE BRONZE EARLY. Rendering the voices uses OfflineAudioContext,
+     * which produces no sound and is therefore NOT subject to the autoplay
+     * policy - it can run the moment the page loads. Only PLAYBACK needs a
+     * user gesture.
+     *
+     * These two used to happen together on the first tap, which meant the
+     * first tap paid for the whole foundry and every sound before it
+     * finished was silently dropped: you flicked, the ball hit a peg, and
+     * nothing happened. That reads as broken audio when it is actually
+     * just latency. Now the buffers are ready long before anyone touches
+     * the screen, and the gesture only has to open the output.
+     *
+     * Safe to call repeatedly and safe to call never - play() requires both
+     * `ready` and `ctx`, so a device without OfflineAudioContext simply
+     * stays silent instead of throwing.
+     */
+    function prepare() {
+        if (!enabled() || ready || rendering || failed) return;
+        try {
+            if (typeof OfflineAudioContext === 'undefined') { failed = true; return; }
+            rendering = true;
+            renderAll();
+        } catch (e) {
+            failed = true;
+            dbg('Audio: could not pre-render voices - playing silent.');
+        }
+    }
+
     function init() {
+        prepare();                       // ...in case the early call never came
         if (!enabled() || ctx) { resume(); return; }
         try {
             const AC = window.AudioContext || window.webkitAudioContext;
@@ -251,7 +282,6 @@ var Audio = (function() {
             master.gain.value = cfg().MASTER;
             master.connect(comp);
 
-            renderAll();
         } catch (e) {
             failed = true;
             dbg('Audio: unavailable on this device - playing silent.');
@@ -586,6 +616,7 @@ var Audio = (function() {
 
     return {
         init: sealed(init, 'init'),
+        prepare: sealed(prepare, 'prepare'),
         resume: sealed(resume, 'resume'),
         peg: sealed(peg, 'peg'),
         score: sealed(score, 'score'),

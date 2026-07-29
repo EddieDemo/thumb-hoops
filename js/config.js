@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v86',
+    VERSION: 'v88',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -625,8 +625,8 @@ var CONFIG = {
             ALPHA: 0.12
         },
 
-        GRID_LINE_WIDTH: 0.5,     // Fixed grid line width
-        BOUNDARY_LINE_WIDTH: 2,
+        GRID_LINE_WIDTH: 0.5,     // at the reference cell
+        BOUNDARY_LINE_WIDTH: 2,   // ...as is this
         // Shoot line width while an aim's release would ABORT (finger still
         // below the line): firmer, meaning "let go here and nothing fires".
 
@@ -646,8 +646,32 @@ var CONFIG = {
         // than a rule welded to the walls. (6 columns -> 9 dots.)
         SHOOT_DOT_STEP: 0.5,
         SHOOT_DOT_INSET: 1,
-        // HOOP_LINE_WIDTH_SCALE: 1 / 15, // << COMMENTED OUT: Old relative scale
-        HOOP_LINE_WIDTH: 1,     // << ADDED: Fixed hoop line width in pixels
+        // --- STROKE WEIGHT, PROPORTIONAL AGAIN ---
+        // Every size in this game is a fraction of a cell; a stroke measured
+        // in fixed pixels is the one thing that is not, and it shows. The
+        // cell is 65px on a phone and 133px on a desktop, so the SAME 1px
+        // line reads at 1.53% of a cell in one place and 0.75% in the other
+        // - half as thick against a ball twice the size. That is the "looks
+        // thinner and odd on desktop" exactly.
+        //
+        // CALIBRATED SO THE PHONE DOES NOT MOVE: the scale reproduces
+        // today's 1px at the phone's 65.5px cell, and only larger screens
+        // change. (An older 1/15 scale is still in the history - far too
+        // heavy for where this design ended up: a 9px slab on a desktop.
+        // Disabling it was right; replacing a wrong proportion with NO
+        // proportion was the mistake.)
+        //
+        // POWER shapes how fast it grows. 1 = strictly proportional. Below
+        // 1 is sub-linear: lines need not grow in step with size to look
+        // right, so 0.8 thickens a desktop noticeably while holding it back
+        // from feeling heavy. MIN keeps a hairline a hairline on a small
+        // window - it can never vanish.
+        LINE_SCALE_REF_CELL: 65.5,  // the cell size the weights below are FOR
+        LINE_SCALE_POWER: 1.0,      // 1 = proportional, 0.8 = gentler growth
+        LINE_MIN_PX: 1,             // never thinner than a hairline
+
+        HOOP_LINE_WIDTH: 1,         // at the reference cell; scaled by lineW()
+        CHEVRON_LINE_WIDTH: 1,      // ...the teaching chevron matches it
         // TRIAL (mobile-first pass): the visible grid is INFORMATION, not
         // decoration - the lattice every size, speed, and drag distance is
         // measured in, made legible so players can calibrate aim and power

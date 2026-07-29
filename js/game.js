@@ -252,6 +252,10 @@ Game.prototype.start = function() {
     // preference survived until exactly the moment you reloaded.)
     applyTheme(this);
     if (typeof Audio !== 'undefined' && Audio.restoreMuted) Audio.restoreMuted();
+    // Cast the bronze now, while nothing is waiting on it. The first tap
+    // then only has to open the output, which is instant - so the very
+    // first peg the ball touches actually rings.
+    if (typeof Audio !== 'undefined' && Audio.prepare) Audio.prepare();
 
     // Interruptibility (the "queue test"): start() runs once per page load,
     // so restoring here means closing the tab mid-streak and reopening

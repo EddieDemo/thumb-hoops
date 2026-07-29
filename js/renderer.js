@@ -126,6 +126,26 @@ function inkCentre(ctx, canvas, dpr) {
 }
 
 /**
+ * A STROKE WEIGHT IN CELL TERMS. Config states widths for a reference cell
+ * (a phone); this converts them for whatever cell the device actually has,
+ * so a line keeps its RELATIONSHIP to the ball and the lattice instead of
+ * its pixel count.
+ *
+ * One function, called by everything that strokes - so there is a single
+ * place to change how weight responds to size, and no chance of two marks
+ * that should match drifting apart.
+ *
+ * @param {Game} game
+ * @param {number} px - The width as authored, at LINE_SCALE_REF_CELL.
+ */
+Renderer.lineW = function(game, px) {
+    const R = CONFIG.RENDER;
+    const ref = R.LINE_SCALE_REF_CELL || 65.5;
+    const k = Math.pow((game.cellRes || ref) / ref, R.LINE_SCALE_POWER);
+    return Math.max(R.LINE_MIN_PX || 0, px * k);
+};
+
+/**
  * THE TOP ROW, from one ordered list. Evenly spread between equal margins,
  * so adding or removing a control respaces the rest instead of leaving a
  * hole - and the order lives in the config as an order, not as four
@@ -297,7 +317,7 @@ Renderer.prototype.drawGhostBall = function(game) {
 
     const halfW = game.cellRes * G.WIDTH * presence;
     const h = game.cellRes * G.HEIGHT * presence;
-    const lw = CONFIG.RENDER.HOOP_LINE_WIDTH; // Same weight as the hoop line and walls
+    const lw = Renderer.lineW(game, CONFIG.RENDER.CHEVRON_LINE_WIDTH); // Matches the hoop line
 
     if (G.STYLE === 'triangle') {
         c.beginPath();
@@ -590,7 +610,7 @@ Renderer.prototype.drawMuteToggle = function(game) {
         const r0 = game.cellRes * 0.22;
         c.beginPath();
         c.strokeStyle = game.themeColors.CONTROL;
-        c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+        c.lineWidth = Renderer.lineW(game, CONFIG.RENDER.HOOP_LINE_WIDTH);
         c.moveTo(cx - r0, cy + r0);
         c.lineTo(cx + r0, cy - r0);
         c.stroke();
@@ -664,7 +684,7 @@ Renderer.prototype.drawSideFill = function(game) {
 
 Renderer.prototype.drawCanvasBoundary = function(game) {
     const c = this.c; c.beginPath(); c.setLineDash([]);
-    c.lineWidth = CONFIG.RENDER.BOUNDARY_LINE_WIDTH; // Use config
+    c.lineWidth = Renderer.lineW(game, CONFIG.RENDER.BOUNDARY_LINE_WIDTH);
     c.rect(0, 0, game.COLUMNS * game.cellRes, game.ROWS * game.cellRes);
     c.strokeStyle = game.themeColors.BOUNDARY; // Use theme color
     c.stroke();

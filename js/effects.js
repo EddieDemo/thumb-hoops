@@ -81,7 +81,7 @@ class RingEffect {
         c.globalAlpha = (1 - this.p) * 0.7;
         c.beginPath();
         c.strokeStyle = game.themeColors.NODE; // Live theme - correct on any colour
-        c.lineWidth = CONFIG.RENDER.HOOP_LINE_WIDTH;
+        c.lineWidth = Renderer.lineW(game, CONFIG.RENDER.HOOP_LINE_WIDTH);
         c.arc(this.x, this.y, r, 0, Math.PI * 2, false);
         c.stroke();
         c.restore();
