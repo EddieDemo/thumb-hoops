@@ -24,6 +24,7 @@
 var Trace = (function() {
 
     let ring = [];
+    let last = null;        // the most recent dump, kept for export
     let deadline = null;    // worldTime at which the dump prints
     let label = '';
     let armed = false;
@@ -138,11 +139,52 @@ var Trace = (function() {
                 n(r.ly, 7) + ' | ' + f.join(' ');
         }).join('\n');
 
+        const text = head + '\n' + body + '\n=== end of trace ===';
         // console.log directly, NOT dbg(): a trace is asked for explicitly
         // and would be useless if it were also gated behind debug logging.
-        console.log(head + '\n' + body + '\n=== end of trace ===\n');
+        console.log(text + '\n');
+        // ...and KEPT, because the console is unreachable on the device
+        // where this is most likely to be caught. On a phone the only way
+        // out is the clipboard, so the last dump has to survive its own
+        // printing (see exportLast).
+        last = text;
         ring = [];
     }
 
-    return { sample: sample, mark: mark, tick: tick };
+    /** Is there a dump worth exporting? Drives the tag's affordance. */
+    function hasLast() { return !!last; }
+
+    /**
+     * Hand the last dump to the device - native share sheet where there is
+     * one, clipboard otherwise. The same route the day's result takes, for
+     * the same reason: on a phone, text that cannot be copied might as well
+     * not exist.
+     *
+     * Never throws: this is called from an input handler.
+     */
+    function exportLast() {
+        if (!last) return false;
+        try {
+            if (navigator.share) {
+                navigator.share({ text: last }).catch(() => clip(last));
+            } else {
+                clip(last);
+            }
+        } catch (e) { clip(last); }
+        return true;
+    }
+
+    function clip(text) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text);
+                dbg('Trace: copied to clipboard.');
+                return;
+            }
+        } catch (e) { /* fall through */ }
+        dbg('Trace: no clipboard available.');
+    }
+
+    return { sample: sample, mark: mark, tick: tick,
+             hasLast: hasLast, exportLast: exportLast };
 })();

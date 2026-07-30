@@ -413,8 +413,19 @@ Renderer.prototype.drawVersionTag = function(game) {
  */
 Renderer.prototype.drawSeedTag = function(game) {
     if (!CONFIG.RENDER.SHOW_SEED_TAG) return;
-    const cached = this.getCachedText('seed', game.courtSeed, CONFIG.RENDER.WEIGHT_WATERMARK,
-        Renderer.textPx(game, 0.25), game.themeColors.AMBIENT);
+    // A caught trace waiting to be exported lifts the tag into the CONTROL
+    // register and marks it. The tag is a watermark until it has something
+    // to give you, at which point it is briefly a button - and it should
+    // look like one, or nobody will think to press it.
+    // Armed, it is drawn in CONTRAST_DOOR - the one role solved to be
+    // findable under EVERY preset. CONTROL was the obvious choice and the
+    // wrong one: in the house preset CONTROL and AMBIENT are the same
+    // value, so the cue was invisible exactly where it is the default.
+    const armed = (typeof Trace !== 'undefined') && Trace.hasLast() &&
+                  CONFIG.TRACE && CONFIG.TRACE.EXPORT_TAP;
+    const cached = this.getCachedText('seed', game.courtSeed + (armed ? ' \u2913' : ''),
+        CONFIG.RENDER.WEIGHT_WATERMARK, Renderer.textPx(game, 0.25),
+        armed ? game.themeColors.CONTRAST_DOOR : game.themeColors.AMBIENT);
     const rightX = (game.COLUMNS - CONFIG.RENDER.TAG_MARGIN_CELLS) * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,

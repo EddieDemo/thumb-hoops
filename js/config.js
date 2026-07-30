@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v90',
+    VERSION: 'v91',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -30,6 +30,16 @@ var CONFIG = {
     // pasted console log rather than from memory.
     TRACE: {
         ENABLED: true,
+        // TAP THE SEED TAG TO EXPORT THE LAST DUMP - and understand the
+        // cost before leaving it on. The tag sits INSIDE the shoot area, so
+        // while a trace is waiting that corner exports instead of picking
+        // up the ball. Every shot arms it, so with this on, the bottom-right
+        // corner is a button most of the time.
+        //
+        // That is the right trade while HUNTING something and the wrong one
+        // the rest of the time. Off for a shipped build; on when a bug is
+        // being chased, or when a tester might need to hand something back.
+        EXPORT_TAP: true,
         BEFORE_STEPS: 24,   // ~0.4s of approach
         AFTER_STEPS: 12     // ~0.2s of aftermath
     },

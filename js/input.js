@@ -276,6 +276,21 @@ InputHandler.prototype.handlePointerDown = function(event) {
         return;
     }
 
+    // THE TRACE, bottom-right: tap the seed tag to copy the last dump.
+    // Its mirror bottom-left switches the debug tool ON; this one hands
+    // back what it caught. Gated on TRACE.ENABLED rather than on god mode,
+    // because the thing worth catching happens during ORDINARY play - and
+    // on a phone the console is unreachable, so the clipboard is the only
+    // way out.
+    if (CONFIG.TRACE && CONFIG.TRACE.ENABLED && CONFIG.TRACE.EXPORT_TAP &&
+        typeof Trace !== 'undefined' && Trace.hasLast() &&
+        pos.x > (this.game.COLUMNS - 1.3) * this.game.cellRes &&
+        pos.y > (this.game.ROWS - 0.85) * this.game.cellRes) {
+        dbg('InputHandler: trace exported.');
+        Trace.exportLast();
+        return;
+    }
+
     // GOD MODE: the version tag, bottom-left. Gated behind CONFIG.DEBUG so
     // it does not exist in a shipped build - exhibition safety means a
     // curious player could not corrupt a record, but there is no reason to
