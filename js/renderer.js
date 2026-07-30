@@ -126,6 +126,36 @@ function inkCentre(ctx, canvas, dpr) {
 }
 
 /**
+ * A TEXT SIZE IN CELL TERMS - the same idea as lineW, for type.
+ *
+ * Every mark in this game is a fraction of a cell, and until now type was
+ * STRICTLY so: a 0.5-cell glyph is 33px on a phone and 66px on a desktop
+ * whose cell is twice the size. That is perfectly consistent and still
+ * looks too big, for the reason typographers have always known - type does
+ * not need to grow in step with its surroundings to hold its place. A
+ * doubled world wants type maybe three-quarters again, not doubled.
+ *
+ * So the same treatment strokes got: authored against a reference cell (a
+ * phone, because that is what this game is designed on and for), grown by
+ * a POWER rather than a ratio. 1 restores the strictly proportional
+ * behaviour exactly, which makes the change a one-character A/B.
+ *
+ * NOT used for the level numeral. That is world geometry - four cells tall
+ * is a statement about the court, not about legibility - so it stays
+ * strictly proportional and scales with the lattice it sits behind.
+ *
+ * @param {Game} game
+ * @param {number} cells - Size in cells, as authored at the reference.
+ */
+Renderer.textPx = function(game, cells) {
+    const R = CONFIG.RENDER;
+    const ref = R.LINE_SCALE_REF_CELL || 65.5;
+    const cell = game.cellRes || ref;
+    const k = Math.pow(cell / ref, R.TEXT_SCALE_POWER);
+    return cells * ref * k;
+};
+
+/**
  * A STROKE WEIGHT IN CELL TERMS. Config states widths for a reference cell
  * (a phone); this converts them for whatever cell the device actually has,
  * so a line keeps its RELATIONSHIP to the ball and the lattice instead of
@@ -356,8 +386,13 @@ Renderer.prototype.drawGhostBall = function(game) {
  * recognisable at a glance when testing on device.
  */
 Renderer.prototype.drawVersionTag = function(game) {
-    const cached = this.getCachedText('version', CONFIG.VERSION, CONFIG.RENDER.WEIGHT_WATERMARK,
-        game.cellRes * 0.25, game.themeColors.AMBIENT);
+    // While god mode is on the tag SAYS SO, and in the control register
+    // rather than the ambient one - a debug session must never be mistaken
+    // for a real one, least of all in a screenshot.
+    const god = !!game.godMode;
+    const cached = this.getCachedText('version', CONFIG.VERSION + (god ? ' GOD' : ''),
+        CONFIG.RENDER.WEIGHT_WATERMARK, Renderer.textPx(game, 0.25),
+        god ? game.themeColors.CONTROL : game.themeColors.AMBIENT);
     const leftX = CONFIG.RENDER.TAG_MARGIN_CELLS * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
@@ -379,7 +414,7 @@ Renderer.prototype.drawVersionTag = function(game) {
 Renderer.prototype.drawSeedTag = function(game) {
     if (!CONFIG.RENDER.SHOW_SEED_TAG) return;
     const cached = this.getCachedText('seed', game.courtSeed, CONFIG.RENDER.WEIGHT_WATERMARK,
-        game.cellRes * 0.25, game.themeColors.AMBIENT);
+        Renderer.textPx(game, 0.25), game.themeColors.AMBIENT);
     const rightX = (game.COLUMNS - CONFIG.RENDER.TAG_MARGIN_CELLS) * game.cellRes;
     const centerY = (game.ROWS - 0.5) * game.cellRes;
     this.c.drawImage(cached.canvas,
@@ -404,7 +439,7 @@ Renderer.prototype.drawThemeToggle = function(game) {
     // light court -> moon (tap for dark).
     const glyph = (typeof isDarkMode === 'function' && isDarkMode()) ? '\u2739' : '\u23FE';
     const cached = this.getCachedText('mode', glyph, CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL, true);
+        Renderer.textPx(game, 0.5), game.themeColors.CONTROL, true);
     // Centred in the TOP-RIGHT-MOST grid cell - the glyph belongs to the
     // lattice, not to a floating margin.
     const centerX = Renderer.glyphX(game, 'theme');
@@ -512,14 +547,14 @@ Renderer.prototype.drawBestStreak = function(game) {
     if (Capture.enabled()) {
         const cx = (game.COLUMNS * game.cellRes) / 2;
         const rec = this.getCachedText('best', 'REC ' + Capture.count() + '/' + Capture.target(),
-            '600', game.cellRes * 0.5, game.themeColors.INFO);
+            '600', Renderer.textPx(game, 0.5), game.themeColors.INFO);
         this.c.drawImage(rec.canvas, cx - rec.w / 2, game.viewTopY + game.cellRes * 0.9 - rec.h / 2, rec.w, rec.h);
         // Testers usually receive this link without anyone beside them:
         // the protocol has to be legible on the glass itself.
         const done = Capture.count() >= Capture.target();
         const hint = this.getCachedText('captureHint',
             done ? 'TAP HERE TO SEND' : 'SAME THROW EVERY TIME',
-            '400', game.cellRes * 0.26, game.themeColors.INFO);
+            '400', Renderer.textPx(game, 0.26), game.themeColors.INFO);
         this.c.drawImage(hint.canvas, cx - hint.w / 2, game.viewTopY + game.cellRes * 1.45 - hint.h / 2, hint.w, hint.h);
         return;
     }
@@ -531,14 +566,14 @@ Renderer.prototype.drawBestStreak = function(game) {
     // basket (records are earned before shown), and hidden entirely on
     // custom courts (exhibition has no ledger). Same register, same
     // bloom-and-drain, same cache.
-    if (game.isCustomCourt || !game.daily || game.daily.best === 0) return;
+    if (game.isExhibition() || !game.daily || game.daily.best === 0) return;
     // Summit - cost, e.g. "14-9": the highest level COMPLETED today and
     // the misses spent when that summit was first set. Completed-basis
     // keeps the record honest against the attempting-basis numeral: after
     // one basket the centre reads 2, the record reads 1-0.
     const label = game.daily.best + CONFIG.RENDER.RECORD_SEP2 + game.daily.missesAtBest;
     const cached = this.getCachedText('best', label, CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.INFO);
+        Renderer.textPx(game, 0.5), game.themeColors.INFO);
     // Centred in the SHOOT AREA - the day's record belongs to the player's
     // own territory, not to the sky. Environment layer, so the resting
     // ball passes in front of it.
@@ -602,7 +637,7 @@ Renderer.prototype.drawMuteToggle = function(game) {
     const c = this.c;
     const muted = (typeof Audio !== 'undefined' && Audio.isMuted) ? Audio.isMuted() : false;
     const cached = this.getCachedText('mute', '\u266A', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL, true);
+        Renderer.textPx(game, 0.5), game.themeColors.CONTROL, true);
     const cx = Renderer.glyphX(game, 'mute');
     const cy = Renderer.glyphY(game);
     c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);
@@ -639,7 +674,7 @@ Renderer.prototype.drawContrastToggle = function(game) {
     const step = (typeof contrastStep === 'function') ? contrastStep() : 0;
     const glyph = GLYPHS[Math.round(step * (GLYPHS.length - 1))] || GLYPHS[0];
     const cached = this.getCachedText('contrast', glyph,
-        CONFIG.RENDER.WEIGHT_LABEL, game.cellRes * 0.5, game.themeColors.CONTRAST_DOOR, true);
+        CONFIG.RENDER.WEIGHT_LABEL, Renderer.textPx(game, 0.5), game.themeColors.CONTRAST_DOOR, true);
     const cx = Renderer.glyphX(game, 'contrast');
     const cy = Renderer.glyphY(game);
     this.c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);
@@ -659,7 +694,7 @@ Renderer.prototype.drawShareGlyph = function(game) {
     if (!CONFIG.SHARE.SHOW_GLYPH) return;
     if (typeof Share === 'undefined' || !Share.hasResult(game)) return;
     const cached = this.getCachedText('share', '\u2197', CONFIG.RENDER.WEIGHT_LABEL,
-        game.cellRes * 0.5, game.themeColors.CONTROL, true);
+        Renderer.textPx(game, 0.5), game.themeColors.CONTROL, true);
     const cx = Renderer.glyphX(game, 'share');
     const cy = Renderer.glyphY(game);
     this.c.drawImage(cached.canvas, cx - cached.cx, cy - cached.cy, cached.w, cached.h);

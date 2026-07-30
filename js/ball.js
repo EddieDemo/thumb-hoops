@@ -64,10 +64,13 @@ class Ball {
         if (game.lines.length === 0) return; // No hoop exists
 
         const hoop = game.lines[0];
-        const hoopY = hoop.pixelY;
+        const hoopY = hoop.scoringY;   // the line's live middle
         const crossedLine = this.prePixelY < hoopY && this.pixelY >= hoopY;
 
         if (crossedLine) {
+            // LIVE positions. The line between these posts IS the scoring
+            // boundary; if a strike moves a post, the boundary moved. The
+            // ball must pass between them where they actually are.
             const nLeft = hoop.node1.pixelX < hoop.node2.pixelX ? hoop.node1 : hoop.node2;
             const nRight = hoop.node1.pixelX < hoop.node2.pixelX ? hoop.node2 : hoop.node1;
             const withinPosts = this.pixelX > nLeft.pixelX && this.pixelX < nRight.pixelX;

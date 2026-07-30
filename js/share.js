@@ -112,7 +112,7 @@ var Share = (function() {
      *          exhibition play keeps no ledger, so it has no result).
      */
     function buildDaily(game) {
-        if (!game || game.isCustomCourt) return null;
+        if (!game || (game.isExhibition && game.isExhibition())) return null;
         const d = game.daily;
         if (!d || !d.best) return null;
 
@@ -188,7 +188,8 @@ var Share = (function() {
 
     /** Is there a result to share? Drives the glyph's visibility. */
     function hasResult(game) {
-        return !!(game && !game.isCustomCourt && game.daily && game.daily.best > 0);
+        return !!(game && !(game.isExhibition && game.isExhibition()) &&
+                  game.daily && game.daily.best > 0);
     }
 
     return {

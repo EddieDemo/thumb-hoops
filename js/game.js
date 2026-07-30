@@ -79,6 +79,12 @@ function Game() {
     // throws at a locked hoop must never charge strokes against today's
     // real record.
     this.isCustomCourt = this.courtSeed !== RNG.todaySeed() || Capture.enabled();
+
+    // GOD MODE: a debugging affordance, off on EVERY load and deliberately
+    // never persisted - a forgotten god mode would silently invalidate
+    // everything played after it, and the one thing a debug tool must not
+    // do is make you doubt your own results.
+    this.godMode = false;
     Palette.setFixedHue(RNG.hueFor(this.courtSeed)); // The court's colour
 
     // --- THE DAILY LEDGER ---
@@ -418,6 +424,10 @@ Game.prototype.animate = function(timestamp) {
     // --- State-Dependent Simulation Stepping ---
     // The persistent ball can be mid-settle in ANY state (the intro drop,
     // a post-round bounce, a set-down): step whenever a dynamic ball exists.
+    // The recorder's countdown runs on wall time, not on simulation steps -
+    // the round it is recording may be the one that stops the simulation.
+    if (typeof Trace !== 'undefined') Trace.tick(this);
+
     const anyDynamicBall = this.balls.some(b => !b.isStatic && !b.sleeping);
     // ...and a struck peg is the world moving too. Without this a peg hit
     // on the shot that ends a round would freeze mid-swing the instant the
@@ -450,6 +460,9 @@ Game.prototype.animate = function(timestamp) {
             }
             for (let i = 0; i < this.nodes.length; i++) this.nodes[i].stepSpring(stepDuration);
             this.stepSimulation();
+            // The flight recorder samples the SIMULATION, after it has
+            // stepped - so a row is exactly what the rules saw this step.
+            if (typeof Trace !== 'undefined') Trace.sample(this);
             this.accumulator -= stepDuration;
             stepsTaken++;
         }
@@ -723,13 +736,17 @@ Game.prototype.initiateLevelResetLogic = function() {
     // The flag must outlive fateTransit (nulled below) for startHoopCycle.
     this.holdWorldThisReset = !!(this.fateTransit && this.fateTransit.holdWorld);
 
+    if (typeof Trace !== 'undefined' && !this.hasScored) {
+        Trace.mark(this, 'MISS at level ' + (this.score + 1));
+    }
+
     if (!this.hasScored) {
         // A real missed shot costs a stroke on the daily ledger (voluntary
         // restarts and scheme switches are free - putting your ball down
         // is not a stroke). Counted silently; it only surfaces when baked
         // into a new summit's price.
         Capture.finish(false);
-        if (!this.isCustomCourt) {
+        if (!this.isExhibition()) {
             this.daily.misses++;
             this.daily.seq.push(0); // the day's shape: a hollow circle
             Persistence.save('dailyRecord', this.daily);
@@ -944,6 +961,29 @@ Game.prototype.startFateTransit = function(mode) {
  * Ball detects the crossing, but scoring bookkeeping (streak, best, and
  * persistence) is the Game's concern.
  */
+/**
+ * EXHIBITION: this session keeps no ledger. One authority, three reasons -
+ * a custom ?seed= court (a friend's easy Tuesday must not become your
+ * record), the capture instrument (measurement is not play), and god mode
+ * (a carried ball is not a shot). Every write to the daily record asks
+ * this, so a new reason is added in exactly one place.
+ */
+/**
+ * Toggle god mode. Runtime only - see the note where godMode is declared.
+ * Any streak standing when it is switched ON is abandoned, because a run
+ * that continues across the boundary is neither a real run nor a debug one,
+ * and would end up in the ledger looking like the former.
+ */
+Game.prototype.toggleGodMode = function() {
+    this.godMode = !this.godMode;
+    if (this.godMode) this.resetStreak();
+    dbg('Game: god mode ' + (this.godMode ? 'ON - exhibition, no ledger' : 'off'));
+};
+
+Game.prototype.isExhibition = function() {
+    return this.isCustomCourt || this.godMode;
+};
+
 Game.prototype.registerScore = function(crossSpeed, crossU) {
     Capture.finish(true);
 
@@ -967,9 +1007,10 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
     // Sounded at the hoop, where it is decided - pitched by the run so far,
     // so the streak climbs the ladder, and struck at the speed it passed
     // through, in cells so it feels the same on any screen.
+    if (typeof Trace !== 'undefined') Trace.mark(this, 'SCORE at level ' + (this.score + 1));
     Audio.score(this.score, crossStrength);
     this.score++;
-    if (!this.isCustomCourt) this.daily.seq.push(1); // ...and a filled one
+    if (!this.isExhibition()) this.daily.seq.push(1); // ...and a filled one
 
     // ...and the colotomy behind it, marking the run's own cycles. Fired on
     // the ACHIEVED count (so 'kenong every 4' means the 4th basket), and
@@ -988,13 +1029,13 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
     // tick up with you is part of the reward. EXHIBITION GUARD: a custom
     // court (loaded via ?seed=) never writes records - a friend's easy
     // Tuesday must not pollute your ladder.
-    if (!this.isCustomCourt && this.score > this.bestStreak) {
+    if (!this.isExhibition() && this.score > this.bestStreak) {
         this.bestStreak = this.score;
         Persistence.save('bestStreak', this.bestStreak);
     }
     // Daily summit: climbing past today's best re-sets the record LIVE,
     // snapshotting the day's miss count as its price. Only ever improves.
-    if (!this.isCustomCourt && this.score > this.daily.best) {
+    if (!this.isExhibition() && this.score > this.daily.best) {
         this.daily.best = this.score;
         this.daily.missesAtBest = this.daily.misses;
         // Snapshot the shape alongside the cost. The share shows the day
@@ -1120,7 +1161,10 @@ Game.prototype.moveCarriedBall = function(x, y) {
     const r = this.currentBall.radius;
     const minX = r, maxX = this.COLUMNS * this.cellRes - r;
     let minY = r;
-    if (CONFIG.INPUT.FLICK.CLAMP_TO_ZONE) {
+    // ...and god mode lifts the clamp with it. Leaving this in place would
+    // pin the ball at the line no matter what custody allowed - the two
+    // rules enforce the same thing from opposite ends, so both go together.
+    if (CONFIG.INPUT.FLICK.CLAMP_TO_ZONE && !this.godMode) {
         // Zone membership is judged by the ball's CENTRE (collision stays
         // edge-based): carried, the centre rides AT the line, the ball
         // visually straddling it.
@@ -1151,6 +1195,21 @@ Game.prototype.releaseCarriedBall = function(vx, vy) {
     ball.velocity = { x: vx, y: vy };
     ball.prePixelX = ball.pixelX;
     ball.prePixelY = ball.pixelY;
+    if (this.godMode) {
+        // Promotion normally waits for the ball's centre to LEAVE the shoot
+        // area. God mode can drop the ball from above that line, where no
+        // such crossing will ever happen - so the release IS the shot.
+        // Without this the drop would be a dribble and a clean pass through
+        // the hoop would score nothing, which is precisely the behaviour
+        // one would be trying to debug.
+        dbg('Game: [god] released above the zone - promoted on release.');
+        Capture.markPromoted();
+        this.hasScored = false;
+        this.roundInvalidated = false;
+        this.fateTransit = null;
+        this.transitionTo(GameStates.SHOT_TAKEN);
+        return;
+    }
     dbg('Game: ball released with v=(' + vx.toFixed(1) + ', ' + vy.toFixed(1) + ') - free until it leaves the zone.');
     this.transitionTo(GameStates.READY_TO_AIM);
 };

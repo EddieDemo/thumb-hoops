@@ -6,7 +6,7 @@ class Hoop {
         this.game = game;
         this.node1 = node1; // Left peg (createHoop guarantees node1.x < node2.x)
         this.node2 = node2;
-        this.pixelY = this.node1.pixelY; // Cache Y pos
+        // (scoringY is a live getter - see below.)
 
         // Presentation birth time. The line's draw-in is internally delayed
         // (LINE_DELAY_MS) so the pegs pop first - anchors, then string.
@@ -164,7 +164,7 @@ class Hoop {
             presence = Motion.easeOutCubic(
                 Motion.progress(age, M.LINE_DELAY_MS / 1000, M.LINE_DRAW_MS / 1000));
         }
-        if (presence <= 0.001) { this.pixelY = y; return; }
+        if (presence <= 0.001) return;
 
         const prevAlpha = c.globalAlpha;
         c.globalAlpha = prevAlpha * presence;
@@ -200,13 +200,30 @@ class Hoop {
         c.stroke();
         c.globalAlpha = prevAlpha;
 
-        this.pixelY = y; // Update cached Y
     }
 
+    /**
+     * THE SCORING HEIGHT: the line's own middle, live.
+     *
+     * THE LINE IS THE BOUNDARY. It is not a convention laid over the
+     * physics - it is what the object IS - so if the posts move, the
+     * boundary moves with them, and a shot is judged against the hoop that
+     * is actually on screen. Scoring against a remembered position would
+     * make the picture and the rule disagree, which is the one thing this
+     * codebase does not do anywhere else.
+     *
+     * A GETTER, not a cached field. It used to be written inside draw(),
+     * which quietly made the scoring height depend on a frame having been
+     * rendered - so a resize, or any order change, could judge a shot
+     * against a stale number. Derived on demand, it cannot go stale.
+     */
+    get scoringY() {
+        return (this.node1.pixelY + this.node2.pixelY) / 2;
+    }
+    get pixelY() { return this.scoringY; }   // the older name, same fact
+
     resizeUpdate(game) {
-        // The cached scoring height is the MEAN of the two posts - the same
-        // definition draw() uses, so a tilted hoop is scored at its middle
-        // whether or not a frame has been drawn since the resize.
-        this.pixelY = (this.node1.pixelY + this.node2.pixelY) / 2;
+        // Nothing to cache: scoringY reads the posts, and the posts have
+        // already been repositioned by the time this runs.
     }
 }

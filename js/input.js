@@ -276,6 +276,18 @@ InputHandler.prototype.handlePointerDown = function(event) {
         return;
     }
 
+    // GOD MODE: the version tag, bottom-left. Gated behind CONFIG.DEBUG so
+    // it does not exist in a shipped build - exhibition safety means a
+    // curious player could not corrupt a record, but there is no reason to
+    // hand out a screenshot of level 40 either.
+    if (CONFIG.GOD_MODE_TAP &&
+        pos.x < this.game.cellRes * 1.2 &&
+        pos.y > (this.game.ROWS - 1) * this.game.cellRes) {
+        dbg('InputHandler: God mode tapped.');
+        this.game.toggleGodMode();
+        return;
+    }
+
     // Theme toggle (product feature): a tap in the top-right glyph region
     // flips light/dark - same action as the T key, persisted.
     // The region hangs from the VISIBLE top, exactly like the glyph does.
@@ -291,7 +303,11 @@ InputHandler.prototype.handlePointerDown = function(event) {
 
     const shootAreaY = (this.game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.game.cellRes;
 
-    if (this.game.currentState === GameStates.READY_TO_AIM && pos.y >= shootAreaY) {
+    // God mode lifts the shoot-area restriction: the ball may be taken
+    // from anywhere, including above the hoop. Everything downstream is
+    // unchanged - it is the same pickup, from a larger region.
+    const canReach = this.game.godMode || pos.y >= shootAreaY;
+    if (this.game.currentState === GameStates.READY_TO_AIM && canReach) {
         dbg(`InputHandler: Valid aim start at (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}), transitioning to AIMING.`);
 
         this.activePointerId = event.pointerId;
@@ -388,7 +404,12 @@ InputHandler.prototype.handlePointerMove = function(event) {
         // one consistent physics baseline.
         if (this.game.currentState === GameStates.AIMING) {
             const shootAreaY = (this.game.ROWS - CONFIG.GAME.SHOOT_AREA_ROWS) * this.game.cellRes;
-            if (pos.y < shootAreaY) {
+            // GOD MODE HOLDS CUSTODY. The line exists so that every flick
+            // launches from one baseline - but a debug carry has no launch
+            // to standardise, and being unable to lift the ball past the
+            // line is precisely being unable to use the tool. Custody then
+            // ends where it otherwise would: when the finger lifts.
+            if (pos.y < shootAreaY && !this.game.godMode) {
                 // CUSTODY ENDS AT THE LINE - no speed qualifier, no
                 // pinning. The ball leaves the hand with whatever motion
                 // the gesture had: a real flick flies; a slow carry-across

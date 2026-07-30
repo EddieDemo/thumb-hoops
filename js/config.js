@@ -6,11 +6,33 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v88',
+    VERSION: 'v90',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
     DEBUG: false,
+
+    // GOD MODE: tapping the version tag (bottom-left) lets the ball be
+    // carried and dropped from ANYWHERE, including above the hoop - the
+    // fastest way to reproduce a scoring question without playing twenty
+    // real rounds to reach it.
+    //
+    // A separate switch from DEBUG, because DEBUG also turns on logging and
+    // one should be able to have the tool without the noise. Set false for
+    // a shipped build: exhibition safety means a curious player could not
+    // corrupt a record, but there is no reason to hand out a screenshot of
+    // level 40 either.
+    GOD_MODE_TAP: true,
+
+    // THE FLIGHT RECORDER (js/trace.js). Dumps the physics steps either
+    // side of a score or a miss, in CELLS, with both live and home post
+    // positions - enough to answer "did that really miss, and why" from a
+    // pasted console log rather than from memory.
+    TRACE: {
+        ENABLED: true,
+        BEFORE_STEPS: 24,   // ~0.4s of approach
+        AFTER_STEPS: 12     // ~0.2s of aftermath
+    },
 
     GRID: {
         // MOBILE-FIRST grid. 6x11 keeps the board full-bleed on modern phone
@@ -668,6 +690,13 @@ var CONFIG = {
         // window - it can never vanish.
         LINE_SCALE_REF_CELL: 65.5,  // the cell size the weights below are FOR
         LINE_SCALE_POWER: 1.0,      // 1 = proportional, 0.8 = gentler growth
+        // ...and the same for TYPE (Renderer.textPx). Type holds its place
+        // without matching its surroundings step for step: a doubled world
+        // wants type about three-quarters again, not doubled. 1 restores
+        // the strictly proportional behaviour exactly, so this is a
+        // one-character A/B. The level numeral is exempt - four cells tall
+        // is world geometry, not legibility.
+        TEXT_SCALE_POWER: 0.82,
         LINE_MIN_PX: 1,             // never thinner than a hairline
 
         HOOP_LINE_WIDTH: 1,         // at the reference cell; scaled by lineW()
