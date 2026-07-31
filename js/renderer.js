@@ -582,14 +582,26 @@ Renderer.prototype.drawBestStreak = function(game) {
         return;
     }
 
-    if (game.bestStreak <= 0) return;
+    // (An older earned-before-shown guard on the ALL-TIME best used to sit
+    // here too. It outlived its reason: the label reports the DAY, not the
+    // lifetime, and gating today's readout on a number from a previous
+    // session meant a brand-new player saw nothing while a returning one
+    // saw everything - the same court, two different interfaces.)
     // THE DAILY RECORD replaces the all-time BEST on the glass (all-time
     // persists in storage for the future clubhouse overlay). Reads as
     // current : summit - cost, e.g. "1:14-9". Hidden until today's first
     // basket (records are earned before shown), and hidden entirely on
     // custom courts (exhibition has no ledger). Same register, same
     // bloom-and-drain, same cache.
-    if (game.isExhibition() || !game.daily || game.daily.best === 0) return;
+    // SHOWN FROM THE FIRST FRAME of any real run, including at 0-0.
+    //
+    // It used to wait for a first basket, on the reasoning that a newcomer
+    // should see nothing that needs explaining. But an element that ARRIVES
+    // is louder than one that was always there: the label popped into
+    // existence at level 2 and pulled the eye at exactly the moment the
+    // player should be watching the ball. A quiet 0-0 explains itself the
+    // instant it becomes 1-0.
+    if (game.isExhibition() || !game.daily) return;
     // Summit - cost, e.g. "14-9": the highest level COMPLETED today and
     // the misses spent when that summit was first set. Completed-basis
     // keeps the record honest against the attempting-basis numeral: after

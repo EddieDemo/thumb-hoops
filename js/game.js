@@ -286,7 +286,14 @@ Game.prototype.start = function() {
     // Interruptibility (the "queue test"): start() runs once per page load,
     // so restoring here means closing the tab mid-streak and reopening
     // resumes it - the game un-pauses rather than punishing the interruption.
-    this.score = Persistence.load('streak', 0);
+    // A STREAK BELONGS TO ITS BOARD. Resuming is for the interruption the
+    // queue test assumes - closing the tab mid-run and coming back. It is
+    // NOT for carrying a run across to a different court: a new seed is a
+    // new set of placements, a new ladder, a new colour, and inheriting a
+    // streak into it would be claiming progress on a board that never gave
+    // it. The seed is stored with the streak, and only a match resumes.
+    const heldSeed = Persistence.load('streakSeed', null);
+    this.score = (heldSeed === this.courtSeed) ? Persistence.load('streak', 0) : 0;
     Palette.restore(this.score); // Run colour resumes with the run
     this.hasScored = false;
     this.deltaTime = 0;
@@ -1046,6 +1053,7 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
     }
     this.hasScored = true; // Mark score for this round
     Persistence.save('streak', this.score);
+    Persistence.save('streakSeed', this.courtSeed);
 
     this.startFateTransit('score'); // The world blooms with the fall
 
@@ -1081,6 +1089,7 @@ Game.prototype.resetStreak = function() {
     }
     this.score = 0;
     Persistence.save('streak', 0);
+    Persistence.save('streakSeed', this.courtSeed);
 
     // If a miss fate-transit already drained the world (the normal in-flight
     // path), the Palette is settled and rerolled - don't drain again. The

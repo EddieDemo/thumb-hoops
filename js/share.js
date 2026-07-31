@@ -114,7 +114,7 @@ var Share = (function() {
     function buildDaily(game) {
         if (!game || (game.isExhibition && game.isExhibition())) return null;
         const d = game.daily;
-        if (!d || !d.best) return null;
+        if (!d) return null;
 
         // A date reads as a date; anything else is named as a seed, so a
         // shared custom court says plainly which board to load. Without the
@@ -193,8 +193,11 @@ var Share = (function() {
 
     /** Is there a result to share? Drives the glyph's visibility. */
     function hasResult(game) {
-        return !!(game && !(game.isExhibition && game.isExhibition()) &&
-                  game.daily && game.daily.best > 0);
+        // Present for any real run, from the first frame - see the note on
+        // the record label. A share of 0 in 0 is a true statement about a
+        // day that has not started, and a control that is always there is
+        // better than one that appears mid-run.
+        return !!(game && !(game.isExhibition && game.isExhibition()) && game.daily);
     }
 
     return {
