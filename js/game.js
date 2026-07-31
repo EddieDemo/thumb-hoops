@@ -69,7 +69,15 @@ function Game() {
     if (typeof window !== 'undefined' && window.location && window.location.search) {
         try { urlSeed = new URLSearchParams(window.location.search).get('seed'); } catch (e) {}
     }
-    this.courtSeed = (urlSeed && urlSeed.trim()) ? urlSeed.trim() : RNG.todaySeed();
+    // ?seed=random rolls a fresh court every load. The SENTINEL is replaced
+    // immediately by the number it rolled, so the tag shows a real seed that
+    // can be read, shared and returned to - a court nobody can name is a
+    // court nobody can be challenged on.
+    let requested = (urlSeed && urlSeed.trim()) ? urlSeed.trim() : '';
+    if (requested.toLowerCase() === CONFIG.GAME.RANDOM_SEED_WORD) {
+        requested = String(Math.floor(Math.random() * 90000000) + 10000000);
+    }
+    this.courtSeed = requested || RNG.todaySeed();
     // Exhibition rule: custom means NOT TODAY. A shared link to today's
     // court counts fully (it IS the daily); yesterday's or tomorrow's date
     // - or any arbitrary seed - is exhibition. Emergent nicety: playing
@@ -99,6 +107,10 @@ function Game() {
     this.daily = (storedDaily && storedDaily.seed === this.courtSeed)
         ? storedDaily
         : { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0, seq: [], seqAtBest: [] };
+    if (this.isCustomCourt) {
+        // Never adopt the stored record on a custom court, whatever it says.
+        this.daily = { seed: this.courtSeed, best: 0, missesAtBest: 0, misses: 0, seq: [], seqAtBest: [] };
+    }
     // A DAY THAT PREDATES THE SHAPE CANNOT KNOW ITS OWN HISTORY. Its
     // attempts happened while nothing was watching, so the misses in its
     // record have no corresponding circles. Recording from here would be
@@ -107,12 +119,20 @@ function Game() {
     // than the number beside it. A shape that disagrees with its own
     // numbers is a lie, so this day simply goes without one. Tomorrow's
     // starts clean, and every day after it.
+    // WHERE THE RECORD IS KEPT. The day's court owns the stored slot; a
+    // custom court gets an equally real record that simply lives in memory
+    // for the session. Both can be played, both can be shared, and neither
+    // can overwrite the other - one storage key, one owner.
+    //
+    // In-memory is the honest lifetime for a custom court anyway: the
+    // artefact is the share string, and the seed in it is how anyone
+    // returns to the board.
     if (!Array.isArray(this.daily.seq)) {
         this.daily.seq = [];
         if (this.daily.best > 0) this.daily.noShape = true;
     }
     if (!Array.isArray(this.daily.seqAtBest)) this.daily.seqAtBest = [];
-    dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - exhibition)' : ' (daily)'));
+    dbg('Game: court "' + this.courtSeed + '"' + (this.isCustomCourt ? ' (custom - own record, in memory)' : ' (daily)'));
     // Detached one-shot effects (see effects.js) - may outlive the round
     // that spawned them. Updated/pruned in animate, drawn by the renderer.
     this.effects = [];
@@ -749,7 +769,7 @@ Game.prototype.initiateLevelResetLogic = function() {
         if (!this.isExhibition()) {
             this.daily.misses++;
             this.daily.seq.push(0); // the day's shape: a hollow circle
-            Persistence.save('dailyRecord', this.daily);
+            if (!this.isCustomCourt) Persistence.save('dailyRecord', this.daily);
         }
         this.resetStreak(); // Miss: the streak ends (and is persisted as ended)
     } else {
@@ -962,11 +982,15 @@ Game.prototype.startFateTransit = function(mode) {
  * persistence) is the Game's concern.
  */
 /**
- * EXHIBITION: this session keeps no ledger. One authority, three reasons -
- * a custom ?seed= court (a friend's easy Tuesday must not become your
- * record), the capture instrument (measurement is not play), and god mode
- * (a carried ball is not a shot). Every write to the daily record asks
- * this, so a new reason is added in exactly one place.
+ * EXHIBITION: this session is not a real run, so it keeps no ledger at all.
+ * Two reasons only - the capture instrument (measurement is not play) and
+ * god mode (a carried ball is not a shot).
+ *
+ * A CUSTOM ?seed= COURT IS NOT EXHIBITION. It is a genuine run on a
+ * different board, and it earns a genuine record - one that can be shared,
+ * so a seed someone posts can be answered. What a custom court must never
+ * do is touch the DAY's ledger, and that is handled by where the record is
+ * KEPT (see the note on daily), not by refusing to keep one.
  */
 /**
  * Toggle god mode. Runtime only - see the note where godMode is declared.
@@ -981,7 +1005,7 @@ Game.prototype.toggleGodMode = function() {
 };
 
 Game.prototype.isExhibition = function() {
-    return this.isCustomCourt || this.godMode;
+    return this.godMode || Capture.enabled();
 };
 
 Game.prototype.registerScore = function(crossSpeed, crossU) {
@@ -1042,7 +1066,7 @@ Game.prototype.registerScore = function(crossSpeed, crossU) {
         // only up to HERE, so that playing on can never make it look worse
         // - the same rule the numbers already obey.
         this.daily.seqAtBest = this.daily.seq.slice();
-        Persistence.save('dailyRecord', this.daily);
+        if (!this.isCustomCourt) Persistence.save('dailyRecord', this.daily);
     }
     dbg('Game: Score registered. Streak:', this.score, 'Best:', this.bestStreak);
 };

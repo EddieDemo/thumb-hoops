@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v94',
+    VERSION: 'v95',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -470,7 +470,7 @@ var CONFIG = {
     // this game's constraint. The glyphs must be things every phone and
     // desktop already renders - no custom font, no image.
     SHARE: {
-        TITLE: 'Thumb-Hoops',
+        TITLE: 'Kotekan',
         // A day is a sequence of RUNS, and the shape of that sequence is
         // the story. Two lines: bars to be SEEN, numbers to be READ. The
         // second is the legend for the first, so neither needs explaining.
@@ -498,6 +498,10 @@ var CONFIG = {
         // line), and 3 rows (~3.5cm) amputated a natural 5-7cm flick.
         // Placement ceiling derives from this (one-row buffer above the
         // line) - changing it re-triggers the anchor covenant.
+        // ?seed=<this word> rolls a fresh court. A reserved seed: the one
+        // string that names a behaviour rather than a board.
+        RANDOM_SEED_WORD: 'random',
+
         SHOOT_AREA_ROWS: 4,       // Number of rows from bottom for shooting area
 
         // --- First-run teaching (scaffold and fade) ---

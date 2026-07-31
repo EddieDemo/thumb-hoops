@@ -116,8 +116,13 @@ var Share = (function() {
         const d = game.daily;
         if (!d || !d.best) return null;
 
+        // A date reads as a date; anything else is named as a seed, so a
+        // shared custom court says plainly which board to load. Without the
+        // word, a bare number in the header looks like part of the score.
+        const isDate = /^\d{4}-\d{2}-\d{2}$/.test(d.seed || '');
+        const label = isDate ? prettyDate(d.seed) : ('seed ' + d.seed);
         const lines = [
-            CONFIG.SHARE.TITLE + ' \u00b7 ' + prettyDate(d.seed),
+            CONFIG.SHARE.TITLE + ' \u00b7 ' + label,
             d.best + ' in ' + d.missesAtBest
         ];
         // noShape: a day that was already underway when shape-recording
