@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v91',
+    VERSION: 'v93',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -751,6 +751,12 @@ var CONFIG = {
         // trial of eight candidates; the cycler that ran that trial is
         // retired. The fallback is the device's own monospace, so a failed
         // font load degrades to something well drawn rather than to Times.
+        // Bottom-left: the name, then the build. A screenshot is the most
+        // likely thing anyone shares of this game, and it should leave
+        // saying what it is.
+        WORDMARK: 'KOTEKAN',
+        SHOW_VERSION: true,   // false for a shipped build: the name alone
+
         SHOW_MUTE: true,
         SHOW_CONTRAST_TOGGLE: true,
 

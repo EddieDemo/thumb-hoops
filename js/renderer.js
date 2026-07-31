@@ -390,7 +390,19 @@ Renderer.prototype.drawVersionTag = function(game) {
     // rather than the ambient one - a debug session must never be mistaken
     // for a real one, least of all in a screenshot.
     const god = !!game.godMode;
-    const cached = this.getCachedText('version', CONFIG.VERSION + (god ? ' GOD' : ''),
+    // THE WORDMARK, and the version after it. Bottom-left was a bare 'v91'
+    // - developer information, useful to one person and noise to everyone
+    // else. A screenshot of a good court is the most likely thing anyone
+    // ever shares of this game, and it was leaving with nothing on it to
+    // say what it was. The name costs the space the version was already
+    // spending.
+    //
+    // SHOW_VERSION can drop the number for a shipped build, leaving the
+    // name alone; it stays on while there is still a cache-check to do.
+    const name = CONFIG.RENDER.WORDMARK || '';
+    const ver = CONFIG.RENDER.SHOW_VERSION ? CONFIG.VERSION : '';
+    const text = [name, ver, god ? 'GOD' : ''].filter(Boolean).join(' ');
+    const cached = this.getCachedText('version', text,
         CONFIG.RENDER.WEIGHT_WATERMARK, Renderer.textPx(game, 0.25),
         god ? game.themeColors.CONTROL : game.themeColors.AMBIENT);
     const leftX = CONFIG.RENDER.TAG_MARGIN_CELLS * game.cellRes;
