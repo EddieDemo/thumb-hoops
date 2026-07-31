@@ -6,7 +6,7 @@
 var CONFIG = {
     // Displayed bottom-left on the court and in the page title - bump on
     // every deploy so a cached stale build is instantly recognisable.
-    VERSION: 'v93',
+    VERSION: 'v94',
 
     // Master debug switch: gates all dbg() logging across the codebase.
     // console.warn/error always fire regardless - real problems must surface.
@@ -726,14 +726,14 @@ var CONFIG = {
             // Shutter angle, as a camera would mean it: the fraction of a
             // frame's travel that smears. 1.0 is a fully open shutter (film
             // standard is 0.5); lower is crisper. THIS is the subtlety dial.
-            SHUTTER: 0.5,
+            SHUTTER: 1,
             SHUTTER_MAX: 8,       // ceiling, so a typo cannot paint the court
             ALPHA: 1.0,           // opacity at the ball itself
             // The alpha where the SWEPT REGION ends and the wisp begins.
             // 1.0 is the old hard-edged capsule; lower softens the ball's
             // trailing edge into the tail behind it. THIS is the "slight
             // blur on the back of the circle" dial.
-            SOFTNESS: 0.75,
+            SOFTNESS: 0.55,
             MIN_TRAVEL_CELLS: 0.03, // below this there is nothing to smear
             MAX_TRAVEL_CELLS: 1.50  // above this something teleported
         },
@@ -754,7 +754,7 @@ var CONFIG = {
         // Bottom-left: the name, then the build. A screenshot is the most
         // likely thing anyone shares of this game, and it should leave
         // saying what it is.
-        WORDMARK: 'KOTEKAN',
+        WORDMARK: 'Kotekan',
         SHOW_VERSION: true,   // false for a shipped build: the name alone
 
         SHOW_MUTE: true,
@@ -865,6 +865,29 @@ var CONFIG = {
             // vividness without becoming a flashlight in a dark room.
             LIGHT_ANCHOR: { START_S: 0, START_B: 1.00, END_S: 1, END_B: 1.00 },
             DARK_ANCHOR:  { START_S: 0, START_B: 0.00, END_S: 1, END_B: 0.70 },
+
+            // --- BACKGROUND WEIGHT ---
+            // The anchors above move saturation and leave brightness at the
+            // pole, so a day's WEIGHT is decided by its hue: amber lands at
+            // 0.841 luminance and blue at 0.094 from the same ramp position.
+            // Normalising solves brightness for a target instead, so every
+            // day differs in HUE and not in heft.
+            //
+            // The target ramps from the pole, so an untouched court still
+            // opens white (or black); the weight only settles as colour is
+            // earned.
+            //
+            // BG_NORMALISE false restores the old behaviour exactly, which
+            // makes this a one-word A/B on two screens.
+            BG_NORMALISE: true,
+            BG_TARGET_Y_LIGHT: 0.42,  // where a fully-earned light court sits
+            BG_TARGET_Y_DARK: 0.10,   // ...and a dark one
+
+            // How far a mark may desaturate when it cannot reach its target
+            // by brightness alone (solveContrast phase 2). 0 = all the way
+            // to white, which is what produced a "recessive" 1.24:1 label
+            // that shouts. 0.45 keeps it recognisably the world's colour.
+            DESATURATE_FLOOR: 0.45,
 
             // Streak -> progress curve: p = 1 - CURVE_RATE^streak.
             // 0.74: ~70% at streak 4, ~91% at 8, 99.2% at 16, and

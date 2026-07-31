@@ -100,7 +100,17 @@ var Palette = (function() {
         } else {
             // Lighter, phase 2: even full brightness isn't light enough at
             // this saturation - continue by desaturating toward white.
-            let lo = 0, hi = S; // saturation at full brightness; S->0 is white
+            //
+            // FLOORED. Unchecked, this walks all the way to S=0, and a WHITE
+            // mark on a saturated hue carries enormous CHROMATIC contrast
+            // that the luminance ratio cannot see: measured at 1.24:1 and
+            // unmissable on the screen. The floor keeps a mark recognisably
+            // the world's own colour; if the target genuinely cannot be
+            // reached above it, the honest outcome is a slightly quieter
+            // mark rather than a shout.
+            const floorS = S * (cfg().DESATURATE_FLOOR !== undefined
+                ? cfg().DESATURATE_FLOOR : 0);
+            let lo = floorS, hi = S;
             for (let i = 0; i < 20; i++) {
                 const mid = (lo + hi) / 2;
                 if (luminanceHSB(H, mid, 1) < wantY) hi = mid; else lo = mid;
@@ -175,11 +185,85 @@ var Palette = (function() {
      */
     function baseAt(p) {
         const a = mode === 'dark' ? cfg().DARK_ANCHOR : cfg().LIGHT_ANCHOR;
-        return {
+        const base = {
             H: baseHue + cfg().HUE_BEND * p,
             S: a.START_S + (a.END_S - a.START_S) * p,
             B: a.START_B + (a.END_B - a.START_B) * p
         };
+
+        // --- WEIGHT NORMALISATION -----------------------------------------
+        // The anchors move SATURATION and leave BRIGHTNESS at its pole, so
+        // the background's luminance is decided entirely by which hue the
+        // day rolled. Green weighs 0.7152 in the luminance formula and blue
+        // weighs 0.0722, so the same ramp position gives:
+        //
+        //     amber  0.841      green 0.742      red 0.429
+        //     pink   0.231      blue  0.094
+        //
+        // A NINEFOLD range for what is supposed to be one design in
+        // different colours. It also decides which side of PIVOT_Y the
+        // background lands on, which decides whether every mark is solved
+        // darker (saturation preserved, properly recessive) or lighter
+        // (desaturating toward white, and shouting). Two screens, opposite
+        // treatment, from a coin flip nobody chose.
+        //
+        // So: solve BRIGHTNESS for a target luminance, exactly the way every
+        // other element is solved. The background stops being the one thing
+        // exempt from the system.
+        //
+        // THE TARGET RAMPS FROM THE POLE. At p=0 it is the anchor's own
+        // luminance - white in light mode, black in dark - so an untouched
+        // court still opens on a clean sheet. Only as colour is EARNED does
+        // the weight settle toward the target, which is the moment the hue
+        // starts to matter.
+        const R = cfg();
+        if (R.BG_NORMALISE) {
+            const poleY = luminanceHSB(base.H, a.START_S, a.START_B);
+            const target = (mode === 'dark') ? R.BG_TARGET_Y_DARK : R.BG_TARGET_Y_LIGHT;
+            const wantY = poleY + (target - poleY) * p;
+            const solved = solveBaseForY(base.H, base.S, wantY);
+            base.S = solved.S;
+            base.B = solved.B;
+        }
+        return base;
+    }
+
+    /**
+     * The (S, B) that puts a hue at a requested luminance - two phases, the
+     * same shape as solveContrast.
+     *
+     *   1. LOWER BRIGHTNESS. Works whenever the hue at full brightness is
+     *      already lighter than the target (amber, green, red).
+     *   2. LOWER SATURATION. A deep blue at full saturation and full
+     *      brightness has a luminance of 0.075: there is no brightness that
+     *      makes it lighter, because brightness is already spent. The only
+     *      road up is toward white.
+     *
+     * Phase 2 is what makes this a real normalisation rather than a partial
+     * one. Without it the dark hues simply stay dark and the spread barely
+     * closes - and the whole point is that a day should differ in HUE and
+     * not in heft.
+     *
+     * The cost is honest and worth stating: a fully-earned BLUE court can no
+     * longer be a deep saturated blue, because deep saturated blue is dark.
+     * It becomes a lighter, less saturated blue of the same weight as every
+     * other day. That is the trade the target buys.
+     */
+    function solveBaseForY(H, S, wantY) {
+        if (luminanceHSB(H, S, 1) >= wantY) {
+            let lo = 0, hi = 1;                       // brightness
+            for (let i = 0; i < 22; i++) {
+                const mid = (lo + hi) / 2;
+                if (luminanceHSB(H, S, mid) > wantY) hi = mid; else lo = mid;
+            }
+            return { S: S, B: (lo + hi) / 2 };
+        }
+        let lo = 0, hi = S;                            // saturation, B pinned
+        for (let i = 0; i < 22; i++) {
+            const mid = (lo + hi) / 2;
+            if (luminanceHSB(H, mid, 1) < wantY) hi = mid; else lo = mid;
+        }
+        return { S: (lo + hi) / 2, B: 1 };
     }
 
     /**
